@@ -83,3 +83,6 @@ html.clear, html.clear body { background: transparent; }
 @keyframes eraFall { 0% { opacity: 1; transform: translateY(0) rotate(0); } 100% { opacity: 1; transform: translateY(110vh) rotate(720deg); } }
 #hud .hudera { font-size: 17px; color: #ffd43b; }
 #eraline { font-size: 13px; color: #ffd43b; }
+
+h2.sub { margin: 10px 0 6px; font-size: 13px; }
+#paint button.on { background: #f08c00; color: #fff; }

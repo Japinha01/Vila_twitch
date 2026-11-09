@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_ROAD_MAX_LEN, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -11,7 +11,7 @@ import { findPath } from './path';
 import { hashString, mulberry32, type Rng } from './rng';
 import {
   RESOURCES, type Building, type BuildingKind, type Job, type NodeKind, type Resource,
-  type ResourceNode, type Stock, type Villager,
+  type ResourceNode, type Stock, type Villager, type ZoneKind,
 } from './types';
 
 export type AddResult = { ok: true; villager: Villager } | { ok: false; reason: 'exists' | 'full' };
@@ -36,6 +36,8 @@ export interface SaveData {
   warned?: boolean;
   autonomy?: boolean;
   era?: number;
+  road?: number[];
+  zone?: number[];
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
   buildings: Building[];
   nodes: ResourceNode[];
@@ -91,6 +93,8 @@ export class World {
   readonly irrigated = new Uint8Array(N);
   /** 1 = ponte concluída: dá para atravessar a água e o degrau da margem */
   readonly bridge = new Uint8Array(N);
+  readonly road = new Uint8Array(N); // 1 = estrada (não fecha o caminho, anda-se mais rápido)
+  readonly zone = new Uint8Array(N); // ZoneKind pintada pelo streamer
   /** altura do tabuleiro onde há ponte */
   readonly deck = new Float32Array(N);
   /** passos de aldeões com água até o joelho, por tile (decai com o tempo): mostra onde falta ponte */
@@ -108,6 +112,7 @@ export class World {
   private flows = new Float32Array(4);
   private events: string[] = [];
   era = 0; // índice em ERAS
+  private roadAnnounced = false;
   private prevDrought = false;
   private warned = false; // já avisou a seca que vem aí?
   private rx: number[] = []; // x esquerdo do leito por linha
@@ -123,6 +128,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
+      road: Array.from(this.road), zone: Array.from(this.zone),
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -168,6 +174,9 @@ export class World {
     const reliefChanged = data.height.some((h, i) => h !== this.height[i]);
     this.height.set(data.height); this.water.set(data.water); this.moisture.set(data.moisture);
     this.dam.set(data.dam); this.irrigated.set(data.irrigated);
+    this.road.fill(0); this.zone.fill(0);
+    if (data.road?.length === N) this.road.set(data.road);
+    if (data.zone?.length === N) this.zone.set(data.zone);
     this.occ.fill(0); this.blocked.fill(0);
     for (const n of this.nodes) this.occ[this.idx(n.x, n.y)] = 1;
     for (const b of this.buildings) { this.markRect(b.x, b.y, b.w, b.h, 1); if (b.kind !== 'bridge') this.markRect(b.x, b.y, b.w, b.h, 1, this.blocked); }
@@ -217,6 +226,155 @@ export class World {
     const tx = fx - x0, ty = fy - y0;
     const h = (a: number, b: number): number => { const t = this.idx(a, b); return this.bridge[t] ? this.deck[t] : this.height[t]; };
     return (h(x0, y0) * (1 - tx) + h(x0 + 1, y0) * tx) * (1 - ty) + (h(x0, y0 + 1) * (1 - tx) + h(x0 + 1, y0 + 1) * tx) * ty;
+  }
+
+  // ---------- estradas e zonas ----------
+  /** Dá para fazer estrada neste tile? (terra livre, sem água, sem prédio) */
+  canRoad(x: number, y: number): PlaceCheck {
+    if (x < 1 || y < 1 || x >= GRID_W - 1 || y >= GRID_H - 1) return { ok: false, reason: 'space' };
+    const t = this.idx(x, y);
+    if (this.road[t] || this.occ[t] || this.dam[t] || this.channel[t] || this.water[t] > 0.05) return { ok: false, reason: 'space' };
+    const missing: Partial<Stock> = {};
+    for (const r of RESOURCES) { const need = ROAD_COST[r] ?? 0; if (this.stock[r] < need) missing[r] = need - this.stock[r]; }
+    return Object.keys(missing).length ? { ok: false, reason: 'cost', missing } : { ok: true };
+  }
+
+  /** Asfalta um tile na hora, gastando do estoque. */
+  paintRoad(x: number, y: number): PlaceCheck {
+    const c = this.canRoad(x, y);
+    if (!c.ok) return c;
+    for (const r of RESOURCES) this.stock[r] -= ROAD_COST[r] ?? 0;
+    this.road[this.idx(x, y)] = 1;
+    return { ok: true };
+  }
+
+  /** Tira a estrada do tile; devolve metade do custo. */
+  removeRoad(x: number, y: number): boolean {
+    if (x < 0 || y < 0 || x >= GRID_W || y >= GRID_H || !this.road[this.idx(x, y)]) return false;
+    this.road[this.idx(x, y)] = 0;
+    for (const r of RESOURCES) this.stock[r] = Math.min(this.storageCap, this.stock[r] + Math.floor((ROAD_COST[r] ?? 0) * DEMOLISH_REFUND));
+    return true;
+  }
+
+  /** Pinta (ou limpa, com 0) a zona de um tile. Não vale sobre o rio. */
+  paintZone(x: number, y: number, kind: ZoneKind): boolean {
+    if (x < 1 || y < 1 || x >= GRID_W - 1 || y >= GRID_H - 1) return false;
+    const t = this.idx(x, y);
+    if (this.channel[t] || this.zone[t] === kind) return false;
+    this.zone[t] = kind;
+    return true;
+  }
+
+  /** Há algum tile desta zona pintado? */
+  hasZone(kind: ZoneKind): boolean { return this.zone.includes(kind); }
+
+  /** Tipo de zona onde cada prédio nasce sozinho (os que não estão aqui seguem o terreno). */
+  private zoneFor(kind: PlaceableKind): ZoneKind {
+    if (kind === 'house') return 1;
+    if (kind === 'market') return 2;
+    if (kind === 'sawmill' || kind === 'quarry' || kind === 'warehouse') return 3;
+    return 0;
+  }
+
+  /** Lote livre numa zona, colado a uma estrada, o mais perto da prefeitura. */
+  private zoneSite(kind: PlaceableKind, z: ZoneKind): { x: number; y: number } | null {
+    const { w, h } = BUILDINGS[kind];
+    const hall = this.townHall();
+    const cx = hall.x + hall.w / 2, cy = hall.y + hall.h / 2;
+    let best: { x: number; y: number } | null = null;
+    let bd = Infinity;
+    for (let y = 1; y < GRID_H - h; y++) {
+      for (let x = 1; x < GRID_W - w; x++) {
+        const d = (x + w / 2 - cx) ** 2 + (y + h / 2 - cy) ** 2;
+        if (d >= bd) continue;
+        let inZone = true;
+        for (let j = 0; j < h && inZone; j++) for (let i = 0; i < w; i++) if (this.zone[this.idx(x + i, y + j)] !== z) { inZone = false; break; }
+        if (!inZone || !this.spotOk(kind, x, y) || !this.roadTouches(x, y, w, h)) continue;
+        best = { x, y }; bd = d;
+      }
+    }
+    return best;
+  }
+
+  /** Algum tile de estrada encosta (lado a lado) no retângulo? */
+  private roadTouches(x: number, y: number, w: number, h: number): boolean {
+    for (let i = 0; i < w; i++) {
+      if (y > 0 && this.road[this.idx(x + i, y - 1)]) return true;
+      if (y + h < GRID_H && this.road[this.idx(x + i, y + h)]) return true;
+    }
+    for (let j = 0; j < h; j++) {
+      if (x > 0 && this.road[this.idx(x - 1, y + j)]) return true;
+      if (x + w < GRID_W && this.road[this.idx(x + w, y + j)]) return true;
+    }
+    return false;
+  }
+
+  /** Tile de zona sem estrada por perto (a 2 tiles)? */
+  private zoneUnserved(t: number): boolean {
+    const x = t % GRID_W, y = (t - x) / GRID_W;
+    for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) {
+      const nx = x + i, ny = y + j;
+      if (nx >= 0 && ny >= 0 && nx < GRID_W && ny < GRID_H && this.road[this.idx(nx, ny)]) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Os aldeões abrem uma estrada da prefeitura (ou da rede que já existe) até a zona pintada mais
+   * próxima que ainda está sem estrada por perto, gastando o estoque.
+   */
+  private autoRoad(): void {
+    const hall = this.townHall();
+    const hx = hall.x + hall.w / 2, hy = hall.y + hall.h / 2;
+    let goalZone = -1, gd = Infinity;
+    for (let t = 0; t < N; t++) {
+      if (!this.zone[t] || !this.zoneUnserved(t)) continue;
+      const x = t % GRID_W, y = (t - x) / GRID_W;
+      const d = (x - hx) ** 2 + (y - hy) ** 2;
+      if (d < gd) { gd = d; goalZone = t; }
+    }
+    if (goalZone < 0) return;
+    const free = (t: number): boolean => !this.occ[t] && !this.dam[t] && !this.channel[t] && this.water[t] <= 0.05 && !this.bridge[t];
+    const prev = new Int32Array(N).fill(-2); // -2 não visitado, -1 origem
+    const queue: number[] = [];
+    const seed = (t: number): void => { if (prev[t] === -2 && (this.road[t] || free(t))) { prev[t] = -1; queue.push(t); } };
+    for (let t = 0; t < N; t++) if (this.road[t]) seed(t);
+    for (let j = hall.y - 1; j <= hall.y + hall.h; j++) for (let i = hall.x - 1; i <= hall.x + hall.w; i++) {
+      if (i < 1 || j < 1 || i >= GRID_W - 1 || j >= GRID_H - 1) continue;
+      const inside = i >= hall.x && i < hall.x + hall.w && j >= hall.y && j < hall.y + hall.h;
+      if (!inside) seed(this.idx(i, j));
+    }
+    const gx = goalZone % GRID_W, gy = (goalZone - gx) / GRID_W;
+    let end = -1;
+    const len = new Int32Array(N);
+    for (let qi = 0; qi < queue.length && end < 0; qi++) {
+      const t = queue[qi];
+      const x = t % GRID_W, y = (t - x) / GRID_W;
+      if (Math.abs(x - gx) + Math.abs(y - gy) <= 1) { end = t; break; }
+      if (len[t] >= AUTO_ROAD_MAX_LEN) continue;
+      for (let k = 0; k < 4; k++) {
+        const nx = x + DX[k], ny = y + DY[k];
+        if (nx < 1 || ny < 1 || nx >= GRID_W - 1 || ny >= GRID_H - 1) continue;
+        const u = this.idx(nx, ny);
+        if (prev[u] !== -2 || !free(u) || Math.abs(this.height[u] - this.height[t]) > 1) continue;
+        prev[u] = t; len[u] = len[t] + 1; queue.push(u);
+      }
+    }
+    if (end < 0) return;
+    const path: number[] = [];
+    for (let t = end; t >= 0; t = prev[t]) path.push(t);
+    path.reverse(); // da rede/prefeitura até a zona
+    let laid = 0;
+    for (const t of path) {
+      if (this.road[t]) continue;
+      if (laid >= AUTO_ROAD_PER_PASS) break;
+      const x = t % GRID_W, y = (t - x) / GRID_W;
+      const c = this.canRoad(x, y);
+      if (!c.ok || this.stock.wood < (ROAD_COST.wood ?? 0) + AUTO_HOUSE_RESERVE) break;
+      this.paintRoad(x, y);
+      laid++;
+    }
+    if (laid > 0 && !this.roadAnnounced) { this.roadAnnounced = true; this.events.push('🛣 Os aldeões começaram a abrir uma estrada até as zonas.'); }
   }
 
   // ---------- ações dos viewers ----------
@@ -417,7 +575,8 @@ export class World {
   }
 
   private consume(): void {
-    const n = this.villagers.length;
+    const relief = Math.min(MARKET_RELIEF_MAX, this.working('market') * MARKET_RELIEF); // o comércio abastece melhor
+    const n = Math.ceil(this.villagers.length * (1 - relief));
     this.stock.food = Math.max(0, this.stock.food - n);
     this.stock.water = Math.max(0, this.stock.water - n);
   }
@@ -540,7 +699,8 @@ export class World {
     if (!this.walkable(to)) return Infinity;
     if (this.bridge[from] || this.bridge[to]) return 1; // ponte: sem degrau, sem vau
     if (Math.abs(this.height[from] - this.height[to]) > MAX_STEP) return Infinity;
-    return this.water[to] >= WADE_SLOW_DEPTH ? 2 : 1;
+    if (this.water[to] >= WADE_SLOW_DEPTH) return 2;
+    return this.road[to] ? ROAD_STEP_COST : 1;
   }
 
   /** Tiles livres cujo centro está a `reach` do ponto (cx, cy). */
@@ -578,7 +738,7 @@ export class World {
     const dx = tx - v.x, dy = ty - v.y;
     const d = Math.hypot(dx, dy);
     const wading = this.water[this.tileOf(v.x, v.y)] >= WADE_SLOW_DEPTH;
-    const step = MOVE_SPEED * (wading ? WATER_SLOWDOWN : 1);
+    const step = MOVE_SPEED * (wading ? WATER_SLOWDOWN : this.road[this.tileOf(v.x, v.y)] ? ROAD_SPEED : 1);
     if (d <= step) { v.x = tx; v.y = ty; v.pi++; return v.pi >= path.length ? 'arrived' : 'moving'; }
     v.x += (dx / d) * step;
     v.y += (dy / d) * step;
@@ -881,7 +1041,7 @@ export class World {
     for (let i = 0; i < N; i++) if (this.wadeTraffic[i] > 0) this.wadeTraffic[i] *= 0.92; // o trânsito antigo vai sendo esquecido
     this.autoJobs();
     this.autoPlan();
-    if ((this.tick / AUTONOMY_EVERY) % 3 === 0) this.autoBridge(); // procura mais raramente: é um cálculo maior
+    if ((this.tick / AUTONOMY_EVERY) % 3 === 0) { this.autoBridge(); this.autoRoad(); } // procuram mais raramente: é um cálculo maior
   }
 
   private autoJobs(): void {
@@ -912,6 +1072,8 @@ export class World {
 
   /** Terreno bom para `kind` perto da prefeitura: ponto válido, com corredor livre e sem tomar terra de fazenda. */
   private findSite(kind: PlaceableKind): { x: number; y: number } | null {
+    const z = this.zoneFor(kind);
+    if (z && this.hasZone(z)) return this.zoneSite(kind, z); // há zona pintada: só constroem nela, colados à estrada
     const hall = this.townHall();
     const cx = hall.x + hall.w / 2, cy = hall.y + hall.h / 2;
     const { w, h } = BUILDINGS[kind];
@@ -927,6 +1089,7 @@ export class World {
         if (rocks.length) score = Math.min(...rocks.map((n) => (n.x - x) ** 2 + (n.y - y) ** 2)) * 4 + d * 0.1;
         if (score >= bs) continue;
         if (!this.spotOk(kind, x, y) || !this.roomAround(x, y, w, h)) continue;
+        if (this.zoned(x, y, w, h)) continue; // terra zoneada é reservada para o tipo certo
         if (kind !== 'farm' && kind !== 'well' && this.irrigated[this.idx(x, y)] === 1) continue; // terra irrigada fica para fazendas
         best = { x, y }; bs = score;
       }
@@ -950,6 +1113,7 @@ export class World {
     if (wells < Math.ceil(pop / 6) && (wells === 0 || fr('water') < 0.6)) needs.push({ kind: 'well', art: 'um', name: 'poço', why: 'faltava água' });
     if (pop >= this.popCap - Math.max(1, Math.ceil(pop * 0.15)) && fr('food') > 0.25 && fr('water') > 0.25) needs.push({ kind: 'house', art: 'uma', name: 'casa', why: 'faltava moradia' });
     if (RESOURCES.some((r) => fr(r) >= 0.9) && this.countKind('warehouse') < Math.ceil(houses / 3)) needs.push({ kind: 'warehouse', art: 'um', name: 'armazém', why: 'o estoque estava cheio' });
+    if (houses >= 4 && this.countKind('market') < Math.floor(houses / 4)) needs.push({ kind: 'market', art: 'um', name: 'mercado', why: 'a cidade pedia comércio' });
     if (pop >= 8 && this.stock.wood < 30 && this.countKind('sawmill') === 0) needs.push({ kind: 'sawmill', art: 'uma', name: 'serraria', why: 'faltava madeira' });
     if (this.stock.stone < 20 && this.countKind('quarry') === 0) needs.push({ kind: 'quarry', art: 'uma', name: 'pedreira', why: 'faltava pedra' });
     for (const n of needs) {
@@ -961,6 +1125,11 @@ export class World {
       if (this.requestBuild(n.kind, site.x, site.y).ok) this.events.push(`🛠 Os aldeões decidiram construir ${n.art} ${n.name}: ${n.why}.`);
       return;
     }
+  }
+
+  private zoned(x: number, y: number, w: number, h: number): boolean {
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (this.zone[this.idx(x + i, y + j)]) return true;
+    return false;
   }
 
   /** Sem outro prédio colado: deixa um corredor livre para andar. */
@@ -990,7 +1159,7 @@ export class World {
     for (let j = 0; j < h; j++) {
       for (let i = 0; i < w; i++) {
         const t = this.idx(x + i, y + j);
-        if (this.occ[t] || this.dam[t]) return false;
+        if (this.occ[t] || this.dam[t] || this.road[t]) return false;
         if (kind === 'dam' || kind === 'bridge') { if (!this.channel[t]) return false; continue; }
         if (this.channel[t] || this.water[t] > 0.05 || this.height[t] !== h0) return false;
       }

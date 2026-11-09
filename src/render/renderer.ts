@@ -147,7 +147,12 @@ export class Renderer implements GameView {
     const isDam = w.dam[i] === 1;
     const m = w.moisture[i];
     const lift = 1 + (z - 3) * 0.025;
-    const top = isDam ? '#adb5bd' : mix(DRY.map((c) => c * lift) as RGB, GRASS.map((c) => c * lift) as RGB, 0.4 + 0.6 * m);
+    const lo = DRY.map((c) => c * lift) as RGB, hi = GRASS.map((c) => c * lift) as RGB;
+    const t0 = 0.4 + 0.6 * m;
+    const base = lo.map((c, k) => c + (hi[k] - c) * t0) as RGB; // cor do solo
+    let top = isDam ? '#adb5bd' : mix(base, base, 0);
+    if (w.road[i]) top = '#6b6f76';
+    else if (w.zone[i]) top = mix(base, rgb(['#ffffff', '#40c057', '#339af0', '#f59f00'][w.zone[i]]), 0.35);
     const zr = x + 1 < GRID_W ? w.height[w.idx(x + 1, y)] : 0;
     const zl = y + 1 < GRID_H ? w.height[w.idx(x, y + 1)] : 0;
     if (zl < z) this.quad(this.P(x, y + 1, z), this.P(x + 1, y + 1, z), this.P(x + 1, y + 1, zl), this.P(x, y + 1, zl), isDam ? '#868e96' : SOIL_L);
@@ -280,6 +285,9 @@ export class Renderer implements GameView {
       }
       case 'dam':
         this.box(x, y, w, h, z0, 1.2, '#adb5bd', '#868e96', '#6c757d');
+        break;
+      case 'market':
+        this.box(x + 0.1, y + 0.1, w - 0.2, h - 0.2, z0, 0.8, '#d9480f', '#e9d8a6', '#c9b783');
         break;
       case 'bridge':
         this.box(x, y, w, h, z0, 0.12, '#d6a76a', '#b98b53', '#9d733f');

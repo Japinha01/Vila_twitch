@@ -45,6 +45,7 @@ export const ERAS: Era[] = [
       { label: 'casas', icon: '🏠', have: built('house'), need: 6 },
       { label: 'poços', icon: '💧', have: built('well'), need: 3 },
       { label: 'armazéns', icon: '📦', have: built('warehouse'), need: 2 },
+      { label: 'mercado', icon: '🏪', have: built('market'), need: 1 },
     ],
   },
 ];

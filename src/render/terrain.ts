@@ -12,6 +12,8 @@ const lin = (v: number): number => Math.pow(v / 255, 2.2);
 const hex = (h: string): RGB => [lin(parseInt(h.slice(1, 3), 16)), lin(parseInt(h.slice(3, 5), 16)), lin(parseInt(h.slice(5, 7), 16))];
 // matiz por bioma (campo, floresta, terra pedregosa)
 const TINT: RGB[] = [[1, 1, 1], [0.82, 0.93, 0.8], [1.08, 0.97, 0.88]];
+const ROAD = hex('#6b6f76');
+const ZONE: RGB[] = [[0, 0, 0], hex('#40c057'), hex('#339af0'), hex('#f59f00')]; // residencial, comercial, industrial
 const GRASS = hex('#76c957'), DRY = hex('#c9b360'), STONE = hex('#adb5bd'), SOIL = hex('#8f5f33');
 
 export interface TerrainData {
@@ -69,6 +71,7 @@ export function paintTops(w: World, colors: Float32Array): void {
   for (let i = 0; i < N; i++) {
     let c: RGB;
     if (w.dam[i]) c = STONE;
+    else if (w.road[i]) c = ROAD;
     else {
       const t = 0.4 + 0.6 * w.moisture[i];
       const lift = 1 + (w.height[i] - 3) * 0.03;
@@ -78,6 +81,8 @@ export function paintTops(w: World, colors: Float32Array): void {
         (DRY[1] + (GRASS[1] - DRY[1]) * t) * lift * tint[1],
         (DRY[2] + (GRASS[2] - DRY[2]) * t) * lift * tint[2],
       ];
+      const z = w.zone[i];
+      if (z) c = [c[0] * 0.65 + ZONE[z][0] * 0.35, c[1] * 0.65 + ZONE[z][1] * 0.35, c[2] * 0.65 + ZONE[z][2] * 0.35];
     }
     for (let k = 0; k < 4; k++) {
       const o = (i * 4 + k) * 3;

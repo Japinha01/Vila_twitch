@@ -166,5 +166,15 @@ function bridge(): Group {
   return g;
 }
 
-const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well, sawmill, quarry, warehouse, dam, bridge };
+function market(): Group {
+  const g = new Group();
+  g.add(box(mat('#e9d8a6'), 1.7, 0.7, 1.7, 0, 0, 0));
+  g.add(box(mat('#d9480f'), 1.9, 0.1, 1.9, 0, 0.7, 0)); // toldo
+  for (const sx of [-0.57, 0, 0.57]) g.add(box(mat('#fff'), 0.28, 0.11, 1.92, sx, 0.705, 0)); // listras do toldo
+  g.add(box(mat(COLORS.door), 0.4, 0.4, 0.06, 0, 0, 0.86));
+  g.add(box(mat('#a5d8ff'), 0.9, 0.3, 0.05, -0.45, 0.15, 0.86));
+  return g;
+}
+
+const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well, sawmill, quarry, warehouse, dam, bridge, market };
 export const makeBuilding = (kind: BuildingKind): Group => MAKERS[kind]();

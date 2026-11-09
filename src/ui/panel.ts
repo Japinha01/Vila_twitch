@@ -13,7 +13,8 @@ const QUICK = [
   '!trabalhar madeira', '!trabalhar pedra', '!trabalhar comida', '!trabalhar água', '!trabalhar construir',
 ];
 
-type Tool = { type: 'none' } | { type: 'build'; kind: PlaceableKind } | { type: 'priority' } | { type: 'cancel' };
+type PaintWhat = 'road' | 'zone1' | 'zone2' | 'zone3' | 'erase';
+type Tool = { type: 'none' } | { type: 'build'; kind: PlaceableKind } | { type: 'priority' } | { type: 'cancel' } | { type: 'paint'; what: PaintWhat };
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -85,6 +86,8 @@ export class Panel {
       pal.appendChild(b);
       this.paletteBtns.set(kind, b);
     }
+    document.querySelectorAll<HTMLButtonElement>('#paint button').forEach((b) =>
+      b.addEventListener('click', () => this.setTool({ type: 'paint', what: b.dataset.paint as PaintWhat })));
     $('tool-priority').addEventListener('click', () => this.setTool({ type: 'priority' }));
     $('tool-cancel').addEventListener('click', () => this.setTool({ type: 'cancel' }));
   }
@@ -94,6 +97,8 @@ export class Panel {
     this.tool = same ? { type: 'none' } : t;
     this.view.ghost = null;
     this.paletteBtns.forEach((b, k) => b.classList.toggle('on', this.tool.type === 'build' && this.tool.kind === k));
+    document.querySelectorAll<HTMLButtonElement>('#paint button').forEach((b) =>
+      b.classList.toggle('on', this.tool.type === 'paint' && this.tool.what === b.dataset.paint));
     $('tool-priority').classList.toggle('on', this.tool.type === 'priority');
     $('tool-cancel').classList.toggle('on', this.tool.type === 'cancel');
   }
@@ -101,19 +106,23 @@ export class Panel {
   // ---------- mapa: mouse, câmera e colocação ----------
   private initMap(): void {
     const cv = $('game');
-    let drag: { x: number; y: number; moved: number; button: number } | null = null;
+    let drag: { x: number; y: number; moved: number; button: number; paint: boolean } | null = null;
+    let paintFailed = false; // avisa só uma vez por pincelada
     const local = (e: PointerEvent | WheelEvent): { x: number; y: number } => {
       const r = cv.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     };
     cv.addEventListener('contextmenu', (e) => { e.preventDefault(); this.setTool({ type: 'none' }); });
     cv.addEventListener('pointerdown', (e) => {
-      drag = { x: e.clientX, y: e.clientY, moved: 0, button: e.button };
+      drag = { x: e.clientX, y: e.clientY, moved: 0, button: e.button, paint: this.tool.type === 'paint' && e.button === 0 };
       cv.setPointerCapture(e.pointerId);
+      if (drag.paint) { paintFailed = false; const p = local(e); this.paintAt(this.view.pickTile(p.x, p.y), () => { paintFailed = true; }); }
     });
     cv.addEventListener('pointermove', (e) => {
       const p = local(e);
-      if (drag && (e.buttons & 1 || e.buttons & 4)) {
+      if (drag?.paint && e.buttons & 1) {
+        this.paintAt(this.view.pickTile(p.x, p.y), () => { if (!paintFailed) { paintFailed = true; this.addLog('Faltam recursos para a estrada (madeira e pedra).', 'ev'); } });
+      } else if (drag && (e.buttons & 1 || e.buttons & 4)) {
         const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
         drag.moved += Math.abs(dx) + Math.abs(dy);
         drag.x = e.clientX; drag.y = e.clientY;
@@ -125,7 +134,7 @@ export class Panel {
       this.showTip(tile, e.clientX, e.clientY);
     });
     cv.addEventListener('pointerup', (e) => {
-      const wasClick = drag && drag.moved <= 6 && drag.button === 0;
+      const wasClick = drag && !drag.paint && drag.moved <= 6 && drag.button === 0;
       drag = null;
       if (!wasClick) return;
       const p = local(e);
@@ -140,8 +149,26 @@ export class Panel {
     cv.addEventListener('dblclick', () => this.view.resetCamera());
   }
 
+  /** Pinta estrada, zona ou apaga no tile (zonas e apagar usam pincel 3×3; estrada, 1 tile). */
+  private paintAt(t: { x: number; y: number } | null, onNoStock: () => void): void {
+    if (!t || this.tool.type !== 'paint') return;
+    const w = this.world, what = this.tool.what;
+    if (what === 'road') {
+      const r = w.paintRoad(t.x, t.y);
+      if (!r.ok && r.reason === 'cost') onNoStock();
+      return;
+    }
+    for (let j = -1; j <= 1; j++) {
+      for (let i = -1; i <= 1; i++) {
+        const x = t.x + i, y = t.y + j;
+        if (what === 'erase') { w.paintZone(x, y, 0); w.removeRoad(x, y); }
+        else w.paintZone(x, y, Number(what.slice(4)) as 1 | 2 | 3);
+      }
+    }
+  }
+
   private showTip(t: { x: number; y: number } | null, cx: number, cy: number): void {
-    if (!t || this.tool.type === 'build') { this.tip.hidden = true; return; }
+    if (!t || this.tool.type === 'build' || this.tool.type === 'paint') { this.tip.hidden = true; return; }
     this.tip.textContent = describeTile(this.world, t.x, t.y).join('\n');
     this.tip.hidden = false;
     const w = this.tip.offsetWidth, h = this.tip.offsetHeight;
