@@ -15,6 +15,7 @@
           <div id="clock">Dia 1</div>
         </header>
         <section class="card">
+          <div id="season"></div>
           <div id="speed" class="row">
             <button data-speed="0" title="Pausa (espaço)">⏸</button>
             <button data-speed="1" class="on">x1</button>
@@ -23,6 +24,15 @@
           </div>
           <div id="res"></div>
           <div id="pop"></div>
+        </section>
+        <section class="card" id="build">
+          <h2>Construir <small>(streamer)</small></h2>
+          <div id="palette" class="chips"></div>
+          <div class="row">
+            <button id="tool-priority" title="Clique numa obra para priorizar">★ Prioridade</button>
+            <button id="tool-cancel" title="Clique numa obra para cancelar (devolve recursos)">✖ Cancelar obra</button>
+          </div>
+          <div id="hint">Escolha um prédio e clique no mapa. Botão direito ou Esc cancela. Arraste para mover, roda do mouse dá zoom.</div>
         </section>
         <section class="card" id="chat">
           <h2>Chat simulado</h2>

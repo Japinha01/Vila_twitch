@@ -6,8 +6,8 @@ import { Panel } from './ui/panel';
 
 const world = new World(Math.floor(Math.random() * 1e9)); // seed só para o mapa de hoje
 const chat = new CommandProcessor(world, { now: () => performance.now() });
-const panel = new Panel(world, chat);
 const renderer = new Renderer(document.getElementById('game') as HTMLCanvasElement, world);
+const panel = new Panel(world, chat, renderer);
 
 let last = performance.now();
 let acc = 0;
@@ -27,4 +27,4 @@ function frame(now: number): void {
 requestAnimationFrame(frame);
 
 // gancho para testes no navegador / depuração
-(window as unknown as { __vila: unknown }).__vila = { world, chat };
+(window as unknown as { __vila: unknown }).__vila = { world, chat, renderer };

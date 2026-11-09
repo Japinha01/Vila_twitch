@@ -1,5 +1,5 @@
-import { BUILDINGS, RESOURCE_LABEL, TICKS_PER_SECOND } from '../sim/config';
-import type { BuildingKind, Job, Resource } from '../sim/types';
+import { TICKS_PER_SECOND } from '../sim/config';
+import type { Job, Resource } from '../sim/types';
 import { World } from '../sim/world';
 import { normalize, sanitizeName } from './names';
 
@@ -12,7 +12,6 @@ export interface ChatMessage {
 export type Command =
   | { name: 'entrar' }
   | { name: 'trabalhar'; job: Job }
-  | { name: 'construir'; building: Exclude<BuildingKind, 'townhall'> }
   | { name: 'status' }
   | { name: 'vila' }
   | { name: 'apoiar' };
@@ -22,13 +21,10 @@ type ParseResult = { ok: true; cmd: Command } | { ok: false; error?: string };
 const RES_ALIAS: Record<string, Job> = {
   madeira: 'wood', pedra: 'stone', comida: 'food', agua: 'water', construir: 'build', construtor: 'build',
 };
-const BUILD_ALIAS: Record<string, Exclude<BuildingKind, 'townhall'>> = {
-  casa: 'house', fazenda: 'farm', poco: 'well', serraria: 'sawmill', pedreira: 'quarry', armazem: 'warehouse',
-};
 
 /** Cooldown por viewer e por comando, em ms de relógio real. */
 export const COOLDOWN_MS: Record<Command['name'], number> = {
-  entrar: 5000, trabalhar: 5000, construir: 10000, status: 5000, vila: 10000, apoiar: 60000,
+  entrar: 5000, trabalhar: 5000, status: 5000, vila: 10000, apoiar: 60000,
 };
 
 /** Etapa 1 do pipeline: validação (sintaxe e argumentos). */
@@ -45,10 +41,6 @@ export function parseCommand(text: string): ParseResult {
     case 'trabalhar': {
       const job = RES_ALIAS[arg];
       return job ? { ok: true, cmd: { name: 'trabalhar', job } } : { ok: false, error: 'use !trabalhar madeira, pedra, comida, água ou construir' };
-    }
-    case 'construir': {
-      const building = BUILD_ALIAS[arg];
-      return building ? { ok: true, cmd: { name: 'construir', building } } : { ok: false, error: 'use !construir casa, fazenda, poço, serraria, pedreira ou armazém' };
     }
     default: return { ok: false };
   }
@@ -123,20 +115,13 @@ export class CommandProcessor {
         w.setJob(msg.userId, cmd.job);
         reply(`agora você é ${labelJob(cmd.job)}.`);
         break;
-      case 'construir': {
-        const r = w.requestBuild(cmd.building);
-        const label = BUILDINGS[cmd.building].label;
-        if (r.ok) reply(`${label} em obras! Construtores (!trabalhar construir) aceleram.`);
-        else if (r.reason === 'space') reply('não há espaço para construir.');
-        else reply(`faltam recursos para ${label}: ${missingText(r.missing ?? {})}.`);
-        break;
-      }
       case 'status':
         reply(`${labelJob(v.job)} · carregando ${v.carry} · XP ${v.xp}.`);
         break;
       case 'vila': {
         const s = w.stock;
-        reply(`dia ${w.day} · ${w.villagers.length}/${w.popCap} aldeões · 🪵${s.wood} 🪨${s.stone} 🍎${s.food} 💧${s.water}.`);
+        const se = w.season;
+        reply(`dia ${w.day} · ${se.drought ? '🔥 seca' : '☀ temperada'} (${Math.ceil(se.daysLeft)}d) · ${w.villagers.length}/${w.popCap} aldeões · 🪵${s.wood} 🪨${s.stone} 🍎${s.food} 💧${s.water}.`);
         break;
       }
       case 'apoiar':
@@ -151,6 +136,3 @@ export function labelJob(j: Job): string {
   return j === 'build' ? 'construtor' : ({ wood: 'lenhador', stone: 'pedreiro', food: 'fazendeiro', water: 'aguadeiro' } as Record<Resource, string>)[j];
 }
 
-function missingText(m: Partial<Record<Resource, number>>): string {
-  return Object.entries(m).map(([r, n]) => `${n} ${RESOURCE_LABEL[r as Resource]}`).join(', ');
-}
