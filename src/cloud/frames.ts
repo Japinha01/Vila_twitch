@@ -28,7 +28,7 @@ export interface LightFrame {
 }
 
 const STATES: VillagerState[] = ['idle', 'toTarget', 'working', 'toStore'];
-const KINDS: BuildingKind[] = ['townhall', 'house', 'farm', 'well', 'sawmill', 'quarry', 'warehouse', 'dam'];
+const KINDS: BuildingKind[] = ['townhall', 'house', 'farm', 'well', 'sawmill', 'quarry', 'warehouse', 'dam', 'bridge'];
 const WATER_SCALE = 32;
 const N = GRID_W * GRID_H;
 
@@ -121,6 +121,7 @@ export class OverlayMirror {
     if (f.b) w.buildings = f.b.map(([id, k, x, y, bw, bh, progress, workNeeded, done, flooded]): Building => ({
       id, kind: KINDS[k] ?? 'house', x, y, w: bw, h: bh, progress, workNeeded, done: !!done, priority: false, flooded: !!flooded,
     }));
+    if (f.b) w.rebuildBridges();
     if (f.w) {
       const q = fromB64(f.w);
       if (q.length === N) for (let i = 0; i < N; i++) w.water[i] = q[i] / WATER_SCALE;

@@ -158,5 +158,13 @@ function dam(): Group {
   return g;
 }
 
-const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well, sawmill, quarry, warehouse, dam };
+function bridge(): Group {
+  const g = new Group();
+  g.add(box(mat('#b98b53'), 1, 0.1, 1, 0, 0, 0)); // tabuleiro
+  for (let i = -1; i <= 1; i++) g.add(box(mat('#8d6a3f'), 0.08, 0.02, 0.9, i * 0.3, 0.1, 0)); // tábuas (atravessadas)
+  for (const sz of [-0.46, 0.46]) g.add(box(mat('#74481f'), 1, 0.3, 0.07, 0, 0.1, sz)); // guarda-corpos ao longo do rio
+  return g;
+}
+
+const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well, sawmill, quarry, warehouse, dam, bridge };
 export const makeBuilding = (kind: BuildingKind): Group => MAKERS[kind]();

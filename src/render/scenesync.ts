@@ -229,7 +229,7 @@ export class SceneSync {
         this.scene.add(g);
         this.buildings.set(b.id, g);
       }
-      g.position.set(b.x + b.w / 2, w.height[w.idx(b.x, b.y)] * HS, b.y + b.h / 2);
+      g.position.set(b.x + b.w / 2, (b.kind === 'bridge' ? w.deckHeight(b.x, b.y) : w.height[w.idx(b.x, b.y)]) * HS, b.y + b.h / 2);
       // obra "sobe" conforme o progresso
       g.scale.y = b.done ? 1 : 0.12 + 0.88 * (b.progress / b.workNeeded);
       this.syncBar(b, g, camera);

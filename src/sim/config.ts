@@ -43,6 +43,9 @@ export const STARVING_SLOWDOWN = 0.5;
 export const AUTONOMY_EVERY = 100; // ticks entre decisões (10 s no x1)
 export const AUTO_JOB_MARGIN = 15; // só troca de profissão se a nova for bem mais necessária
 export const AUTO_HOUSE_RESERVE = 10; // madeira que sobra depois de uma casa feita sozinhos
+export const AUTO_BRIDGE_MIN_STRANDED = 3; // recursos do outro lado do rio para valer uma ponte
+export const AUTO_BRIDGE_WADE_MIN = 25; // passos de aldeões com água até o joelho num trecho do rio que valem uma ponte
+export const AUTO_BRIDGE_MAX_SPAN = 6; // largura máxima do rio que eles se arriscam a atravessar
 export const AUTO_BUILD_MAX_DIST = 14; // alcance da procura de terreno ao redor da prefeitura
 
 export const BASE_POP_CAP = 10;
@@ -80,6 +83,7 @@ export const BUILDINGS: Record<Exclude<BuildingKind, 'townhall'>, BuildingSpec> 
   quarry: { label: 'Pedreira', w: 2, h: 2, cost: { wood: 40, stone: 5 }, work: 150, slots: 3 },
   warehouse: { label: 'Armazém', w: 2, h: 2, cost: { wood: 40, stone: 20 }, work: 180 },
   dam: { label: 'Represa', w: 2, h: 1, cost: { wood: 30, stone: 20 }, work: 150 },
+  bridge: { label: 'Ponte', w: 1, h: 1, cost: { wood: 8 }, work: 40 },
 };
 
 export const RESOURCE_LABEL: Record<Resource, string> = {
