@@ -12,6 +12,17 @@ export function saveGame(world: World): boolean {
   }
 }
 
+/** Grava um save vindo da nuvem no armazenamento local (valida antes de gravar). */
+export function writeSave(data: SaveData): boolean {
+  try {
+    World.fromSave(data);
+    localStorage.setItem(KEY, JSON.stringify(data));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function loadGame(): World | null {
   try {
     const raw = localStorage.getItem(KEY);
