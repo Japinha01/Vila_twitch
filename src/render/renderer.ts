@@ -276,6 +276,16 @@ export class Renderer {
     }
     ctx.restore();
 
+    if (b.flooded) {
+      let deep = 0;
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) deep = Math.max(deep, wd.water[wd.idx(x + i, y + j)]);
+      const z = z0 + Math.min(deep, 2.5);
+      this.quad(this.P(x, y, z), this.P(x + w, y, z), this.P(x + w, y + h, z), this.P(x, y + h, z), 'rgba(51,154,240,0.45)', false);
+      const [fx, fy] = this.P(x + w / 2, y + h / 2, z0 + 2.2);
+      ctx.font = `700 ${this.u() * 0.5}px system-ui`; ctx.textAlign = 'center'; ctx.fillStyle = '#e7f5ff';
+      ctx.strokeStyle = '#1864ab'; ctx.lineWidth = 3; ctx.strokeText('🌊', fx, fy); ctx.fillText('🌊', fx, fy);
+    }
+
     if (!b.done) {
       const a = this.P(x, y, z0), c = this.P(x + w, y, z0), d = this.P(x + w, y + h, z0), e = this.P(x, y + h, z0);
       ctx.strokeStyle = b.priority ? '#ffa94d' : 'rgba(255,255,255,0.8)';
