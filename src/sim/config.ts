@@ -49,6 +49,15 @@ export const AUTO_BRIDGE_WADE_MIN = 25; // passos de aldeões com água até o j
 export const AUTO_BRIDGE_MAX_SPAN = 6; // largura máxima do rio que eles se arriscam a atravessar
 export const AUTO_BUILD_MAX_DIST = 24; // alcance da procura de terreno ao redor da prefeitura
 
+// ---- estradas, zonas e comércio ----
+export const ROAD_COST: Partial<Record<Resource, number>> = { wood: 2, stone: 1 }; // por tile, na hora
+export const ROAD_STEP_COST = 0.55; // andar em estrada custa menos na rota
+export const ROAD_SPEED = 1.7; // e é mais rápido
+export const MARKET_RELIEF = 0.08; // cada mercado pronto reduz o consumo de comida e água
+export const MARKET_RELIEF_MAX = 0.4;
+export const AUTO_ROAD_MAX_LEN = 40; // maior estrada que eles abrem de uma vez até uma zona
+export const AUTO_ROAD_PER_PASS = 8; // tiles de estrada por decisão
+
 export const BASE_POP_CAP = 10;
 export const HOUSE_POP = 4;
 export const BASE_STORAGE = 100;
@@ -85,6 +94,7 @@ export const BUILDINGS: Record<Exclude<BuildingKind, 'townhall'>, BuildingSpec> 
   warehouse: { label: 'Armazém', w: 2, h: 2, cost: { wood: 40, stone: 20 }, work: 180 },
   dam: { label: 'Represa', w: 2, h: 1, cost: { wood: 30, stone: 20 }, work: 150 },
   bridge: { label: 'Ponte', w: 1, h: 1, cost: { wood: 8 }, work: 40 },
+  market: { label: 'Mercado', w: 2, h: 2, cost: { wood: 30, stone: 10 }, work: 140 },
 };
 
 export const RESOURCE_LABEL: Record<Resource, string> = {

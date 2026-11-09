@@ -1,6 +1,6 @@
 export type Resource = 'wood' | 'stone' | 'food' | 'water';
 export type Job = Resource | 'build';
-export type BuildingKind = 'townhall' | 'house' | 'farm' | 'well' | 'sawmill' | 'quarry' | 'warehouse' | 'dam' | 'bridge';
+export type BuildingKind = 'townhall' | 'house' | 'farm' | 'well' | 'sawmill' | 'quarry' | 'warehouse' | 'dam' | 'bridge' | 'market';
 export type NodeKind = 'tree' | 'rock' | 'bush';
 
 export type Stock = Record<Resource, number>;
@@ -53,3 +53,6 @@ export interface Villager {
 }
 
 export const RESOURCES: Resource[] = ['wood', 'stone', 'food', 'water'];
+
+/** Zonas pintadas pelo streamer: 0 nenhuma, 1 residencial, 2 comercial, 3 industrial. */
+export type ZoneKind = 0 | 1 | 2 | 3;

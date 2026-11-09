@@ -1,6 +1,7 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import type { SaveData } from '../sim/world';
 import type { World } from '../sim/world';
+import { startTicker } from '../ticker';
 import { getSupabase } from './client';
 import { makeLight, packKeyframe, unpackKeyframe, type LightExtras, type LightFrame } from './frames';
 
@@ -23,7 +24,7 @@ const countOverlays = (ch: RealtimeChannel): number =>
 export class OverlayHost {
   private db: SupabaseClient | null = null;
   private ch: RealtimeChannel | null = null;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private stopTimer: (() => void) | null = null;
   private n = 0;
   private lastKey = 0;
   private wantKey = true;
@@ -55,13 +56,13 @@ export class OverlayHost {
         else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { this.onChange(0, 'Não foi possível abrir o canal do overlay.'); resolve(false); }
       });
     });
-    if (ok) this.timer = setInterval(() => { void this.pump(); }, LIGHT_MS);
+    if (ok) this.stopTimer = startTicker(LIGHT_MS, () => { void this.pump(); }); // Worker: transmite mesmo com a aba escondida
     return ok;
   }
 
   async stop(): Promise<void> {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
+    this.stopTimer?.();
+    this.stopTimer = null;
     const ch = this.ch;
     this.ch = null;
     if (ch && this.db) await this.db.removeChannel(ch);

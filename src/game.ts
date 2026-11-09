@@ -4,6 +4,7 @@ import { Renderer } from './render/renderer';
 import type { GameView } from './render/view';
 import { TICKS_PER_SECOND } from './sim/config';
 import { parseSeed, randomSeed } from './sim/seed';
+import { startTicker } from './ticker';
 import { World } from './sim/world';
 import { EraBanner, eraLine } from './ui/erabanner';
 import { Panel } from './ui/panel';
@@ -61,7 +62,7 @@ const eraEl = document.getElementById('eraline')!;
 // ---- salvar: automático a cada 30 s, ao sair da aba e pelo botão ----
 let saveEnabled = true;
 const doSave = (): boolean => saveEnabled && saveGame(world);
-setInterval(doSave, 30000);
+startTicker(30000, doSave);
 document.addEventListener('visibilitychange', () => { if (document.hidden) doSave(); });
 window.addEventListener('beforeunload', doSave);
 panel.onSave = () => { const ok = doSave(); panel.addLog(ok ? '💾 Vila salva neste navegador.' : '⚠ Não foi possível salvar (armazenamento bloqueado ou cheio).', 'ev'); };
@@ -112,17 +113,25 @@ void initCloudPanel({
 });
 if (loaded) panel.addLog(`💾 Vila carregada (dia ${world.day}).`, 'ev');
 
+// A simulação e o chat andam num relógio de Web Worker: continuam com a aba em segundo plano.
+// O desenho (requestAnimationFrame) pausa escondido, o que é só economia.
 let last = performance.now();
 let acc = 0;
+const MAX_STEPS_PER_TICK = 400;
 
-function frame(now: number): void {
-  const dt = Math.min(0.25, (now - last) / 1000); // evita salto ao voltar de outra aba
+function simulate(): void {
+  const now = performance.now();
+  const dt = Math.min(5, (now - last) / 1000); // no máximo 5 s de atraso por vez
   last = now;
   chat.process();
   acc += dt * TICKS_PER_SECOND * panel.speed;
   let steps = 0;
-  while (acc >= 1 && steps++ < 60) { world.step(); acc -= 1; }
-  if (steps >= 60) acc = 0;
+  while (acc >= 1 && steps++ < MAX_STEPS_PER_TICK) { world.step(); acc -= 1; }
+  if (steps >= MAX_STEPS_PER_TICK) acc = 0;
+}
+startTicker(50, simulate);
+
+function frame(): void {
   renderer.draw();
   panel.update();
   eraBanner.update();

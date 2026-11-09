@@ -1,4 +1,5 @@
 import { Cloud } from '../cloud/cloud';
+import { startTicker } from '../ticker';
 import type { World } from '../sim/world';
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -74,5 +75,5 @@ export async function initCloudPanel({ world, log, loadCloudSave }: Hooks): Prom
       auto = false; // sem ler, não arrisca sobrescrever
     }
   }
-  setInterval(() => { void save(false); }, AUTOSAVE_MS);
+  startTicker(AUTOSAVE_MS, () => { void save(false); });
 }

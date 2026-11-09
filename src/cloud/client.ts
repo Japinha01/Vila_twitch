@@ -11,7 +11,8 @@ let client: Promise<SupabaseClient | null> | null = null;
 /** Um único cliente Supabase para o login, a vila na nuvem e o overlay. Carregado só quando preciso. */
 export function getSupabase(): Promise<SupabaseClient | null> {
   if (!URL || !ANON) return Promise.resolve(null);
+  // realtime.worker: o batimento da conexão roda num Worker e não é freado em aba escondida
   client ??= import('@supabase/supabase-js').then(({ createClient }) =>
-    createClient(URL, ANON, { auth: { persistSession: true, detectSessionInUrl: true } }));
+    createClient(URL, ANON, { auth: { persistSession: true, detectSessionInUrl: true }, realtime: { worker: true } }));
   return client;
 }

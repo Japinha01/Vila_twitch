@@ -35,6 +35,14 @@
         <section class="card" id="build">
           <h2>Construir <small>(streamer)</small></h2>
           <div id="palette" class="chips"></div>
+          <h2 class="sub">Estradas e zonas <small>(arraste para pintar)</small></h2>
+          <div id="paint" class="chips">
+            <button data-paint="road" title="Estrada: aldeões andam mais rápido e os lotes nascem ao lado dela. Custo por tile: madeira 2, pedra 1">🛣 Estrada</button>
+            <button data-paint="zone1" title="Zona residencial: casas nascem sozinhas em lotes colados a uma estrada">🏘 Residencial</button>
+            <button data-paint="zone2" title="Zona comercial: mercados nascem sozinhos">🏪 Comercial</button>
+            <button data-paint="zone3" title="Zona industrial: serrarias, pedreiras e armazéns nascem sozinhos">🏭 Industrial</button>
+            <button data-paint="erase" title="Apaga zona e estrada do tile">🧹 Apagar</button>
+          </div>
           <div class="row">
             <button id="tool-priority" title="Clique numa obra para priorizar">★ Prioridade</button>
             <button id="tool-cancel" title="Clique numa obra para cancelar (devolve tudo) ou num prédio pronto para demolir (devolve metade)">✖ Demolir</button>
