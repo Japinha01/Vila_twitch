@@ -141,7 +141,9 @@ export class Panel {
     if (this.tool.type === 'priority') {
       if (w.togglePriority(b.id)) this.addLog(`${b.priority ? '★ Obra priorizada' : 'Prioridade removida'}.`, 'ev');
     } else if (this.tool.type === 'cancel') {
-      if (w.cancelBuild(b.id)) this.addLog('Obra cancelada, recursos devolvidos.', 'ev');
+      if (!b.done) { if (w.cancelBuild(b.id)) this.addLog('Obra cancelada, recursos devolvidos.', 'ev'); }
+      else if (w.demolish(b.id)) this.addLog('Prédio demolido, metade dos recursos devolvida.', 'ev');
+      else this.addLog('A prefeitura não pode ser demolida.', 'ev');
     }
   }
 
@@ -186,7 +188,7 @@ export class Panel {
   // ---------- atualização por frame ----------
   update(): void {
     const w = this.world;
-    for (const e of w.drainEvents()) this.addLog(e.startsWith('🔥') || e.startsWith('🌧') ? e : `🏗 ${e}`, 'ev');
+    for (const e of w.drainEvents()) this.addLog(/^[🔥🌧🌊✅]/u.test(e) ? e : `🏗 ${e}`, 'ev');
     const se = w.season;
     const days = Math.max(1, Math.ceil(se.daysLeft));
     const seasonEl = $('season');

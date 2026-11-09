@@ -22,6 +22,8 @@ export const IRRIGATION_RADIUS = 5;
 export const MOISTURE_RATE = 0.01; // por passo de água
 export const WELL_RANGE = 3.5; // poço só rende com água a esta distância
 export const DAM_RAISE = 2; // quanto a represa sobe o terreno
+export const FLOOD_DEPTH = 0.3; // água a partir daqui alaga o prédio e ele para de funcionar
+export const DEMOLISH_REFUND = 0.5; // fração do custo devolvida ao demolir um prédio pronto
 
 // ---- aldeões ----
 export const MOVE_SPEED = 0.1; // tiles por tick

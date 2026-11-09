@@ -216,7 +216,7 @@ O **streamer joga como no Timberborn**: constrói e melhora a vila clicando no m
 
 **Streamer (painel à direita):**
 - Escolha um prédio na paleta e clique no mapa (a prévia fica verde ou vermelha). Botão direito ou Esc cancela.
-- ★ Prioridade: clique numa obra para os construtores irem primeiro nela. ✖ Cancelar obra devolve os recursos.
+- ★ Prioridade: clique numa obra para os construtores irem primeiro nela. ✖ Demolir: numa obra em andamento devolve tudo; num prédio pronto devolve metade.
 - Câmera: arraste para mover, roda do mouse dá zoom, duplo clique recentraliza. Velocidade: pausa, x1, x2, x4 (atalhos: espaço, 1, 2, 3).
 
 **Mundo:**
@@ -224,6 +224,7 @@ O **streamer joga como no Timberborn**: constrói e melhora a vila clicando no m
 - **Irrigação:** só a terra perto da água fica verde. Árvores e arbustos só rebrotam em solo irrigado; **fazenda** só pode ser construída (e só rende) em solo irrigado; **poço** só rende com água por perto. Fazenda tem 3 vagas de trabalhadores e poço tem 2.
 - **Seca:** a cada 4 dias de estação temperada vêm 2 dias de seca. O rio seca, a terra amarela e as plantações param. Guarde água e comida antes.
 - **Represa:** construída sobre o rio, sobe o terreno e segura a água a montante, formando um reservatório que irriga uma área maior e aguenta mais a seca.
+- **Alagamento:** prédio com água alta sobre ele (por exemplo, perto de um reservatório) para de funcionar até secar; casa alagada não conta para a população e armazém alagado não conta para o estoque.
 - Fome ou sede só deixa o trabalho mais lento; ninguém morre.
 
 ---

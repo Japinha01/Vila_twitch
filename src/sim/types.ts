@@ -24,6 +24,7 @@ export interface Building {
   workNeeded: number;
   done: boolean;
   priority: boolean; // obra prioritária: construtores vão primeiro
+  flooded: boolean; // água acima de FLOOD_DEPTH sobre o prédio: ele não funciona
 }
 
 export type VillagerState = 'idle' | 'toTarget' | 'working' | 'toStore';

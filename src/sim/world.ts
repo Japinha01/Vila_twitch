@@ -4,7 +4,7 @@ import {
   GRID_W, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
   SUPPORT_BONUS, SUPPORT_MAX_TICKS, SUPPORT_TICKS, TEMPERATE_DAYS, TICKS_PER_DAY, WAREHOUSE_STORAGE,
-  WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH, MAX_STEP, MAX_WADE, RETRY_TICKS, WADE_SLOW_DEPTH,
+  WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH, MAX_STEP, MAX_WADE, RETRY_TICKS, WADE_SLOW_DEPTH, FLOOD_DEPTH, DEMOLISH_REFUND,
 } from './config';
 import { findPath } from './path';
 import { hashString, mulberry32 } from './rng';
@@ -77,8 +77,8 @@ export class World {
 
   // ---------- consulta ----------
   get day(): number { return Math.floor(this.tick / TICKS_PER_DAY) + 1; }
-  get popCap(): number { return BASE_POP_CAP + this.doneCount('house') * HOUSE_POP; }
-  get storageCap(): number { return BASE_STORAGE + this.doneCount('warehouse') * WAREHOUSE_STORAGE; }
+  get popCap(): number { return BASE_POP_CAP + this.working('house') * HOUSE_POP; }
+  get storageCap(): number { return BASE_STORAGE + this.working('warehouse') * WAREHOUSE_STORAGE; }
   get supportActive(): boolean { return this.tick < this.supportUntil; }
   get starving(): boolean { return this.stock.food <= 0 || this.stock.water <= 0; }
 
@@ -93,6 +93,8 @@ export class World {
   idx(x: number, y: number): number { return y * GRID_W + x; }
   townHall(): Building { return this.buildings[0]; }
   doneCount(kind: BuildingKind): number { return this.buildings.filter((b) => b.kind === kind && b.done).length; }
+  /** Prédios prontos e não alagados. */
+  working(kind: BuildingKind): number { return this.buildings.filter((b) => b.kind === kind && b.done && !b.flooded).length; }
   findVillager(userId: string): Villager | undefined { return this.villagers.find((v) => v.userId === userId); }
   isWet(i: number): boolean { return this.water[i] >= WET_DEPTH; }
 
@@ -174,6 +176,27 @@ export class World {
     this.markRect(b.x, b.y, b.w, b.h, 0);
     for (const v of this.villagers) if (v.targetId === id) this.resetTask(v);
     this.markRect(b.x, b.y, b.w, b.h, 0, this.blocked);
+    return true;
+  }
+
+  /** Demole um prédio pronto e devolve parte do custo. Represa demolida baixa o terreno de volta. */
+  demolish(id: number): boolean {
+    const b = this.buildings.find((x) => x.id === id);
+    if (!b || !b.done || b.kind === 'townhall') return false;
+    const spec = BUILDINGS[b.kind];
+    for (const r of RESOURCES) this.stock[r] = Math.min(this.storageCap, this.stock[r] + Math.floor((spec.cost[r] ?? 0) * DEMOLISH_REFUND));
+    this.buildings.splice(this.buildings.indexOf(b), 1);
+    this.markRect(b.x, b.y, b.w, b.h, 0);
+    this.markRect(b.x, b.y, b.w, b.h, 0, this.blocked);
+    if (b.kind === 'dam') {
+      for (let j = 0; j < b.h; j++) for (let i = 0; i < b.w; i++) {
+        const t = this.idx(b.x + i, b.y + j);
+        this.height[t] -= DAM_RAISE;
+        this.dam[t] = 0;
+      }
+    }
+    for (const v of this.villagers) if (v.targetId === id) this.resetTask(v);
+    this.events.push(`${spec.label} demolida.`);
     return true;
   }
 
@@ -305,6 +328,20 @@ export class World {
       const m = this.moisture[i] + (this.irrigated[i] ? MOISTURE_RATE : -MOISTURE_RATE);
       this.moisture[i] = m < 0 ? 0 : m > 1 ? 1 : m;
     }
+
+    // 5) alagamento: água alta sobre o prédio o desliga até secar
+    for (const b of this.buildings) {
+      if (b.kind === 'townhall' || b.kind === 'dam') continue;
+      let deep = 0;
+      for (let j = 0; j < b.h; j++) for (let i = 0; i < b.w; i++) deep = Math.max(deep, w[this.idx(b.x + i, b.y + j)]);
+      const flooded = deep >= FLOOD_DEPTH;
+      if (flooded === b.flooded) continue;
+      b.flooded = flooded;
+      if (b.done) {
+        const label = BUILDINGS[b.kind as PlaceableKind].label;
+        this.events.push(flooded ? `🌊 ${label} alagou e parou de funcionar!` : `✅ ${label} secou e voltou a funcionar.`);
+      }
+    }
   }
 
   // ---------- aldeões ----------
@@ -397,7 +434,7 @@ export class World {
       case 'working': return this.work(v);
       case 'toStore': {
         if (!v.path) {
-          const stores = this.buildings.filter((b) => b.done && (b.kind === 'townhall' || b.kind === 'warehouse'));
+          const stores = this.buildings.filter((b) => b.done && !b.flooded && (b.kind === 'townhall' || b.kind === 'warehouse'));
           const id = this.route(v, stores.map((b) => ({ id: b.id, x: b.x + b.w / 2, y: b.y + b.h / 2, reach: Math.max(b.w, b.h) / 2 + 0.7 })));
           if (id === undefined) { v.wait = RETRY_TICKS; return; }
         }
@@ -464,8 +501,8 @@ export class World {
     if (v.workLeft > 0) return;
     const res = v.job as Resource;
     let amt = CARRY_CAPACITY;
-    if (res === 'wood' && this.doneCount('sawmill') > 0) amt *= SAWMILL_BONUS;
-    if (res === 'stone' && this.doneCount('quarry') > 0) amt *= QUARRY_BONUS;
+    if (res === 'wood' && this.working('sawmill') > 0) amt *= SAWMILL_BONUS;
+    if (res === 'stone' && this.working('quarry') > 0) amt *= QUARRY_BONUS;
     amt = Math.round(amt);
     const node = this.nodes.find((n) => n.id === v.targetId);
     if (node) {
@@ -515,6 +552,7 @@ export class World {
   }
 
   private buildingWorks(b: Building): boolean {
+    if (b.flooded) return false;
     if (b.kind === 'farm') return this.irrigated[this.idx(b.x, b.y)] === 1;
     if (b.kind === 'well') return this.waterNear(b.x + b.w / 2, b.y + b.h / 2, WELL_RANGE);
     return false;
@@ -577,7 +615,7 @@ export class World {
   }
 
   private placeBuilding(kind: BuildingKind, x: number, y: number, w: number, h: number, work: number, done: boolean): Building {
-    const b: Building = { id: this.nextId++, kind, x, y, w, h, progress: done ? work : 0, workNeeded: work, done, priority: false };
+    const b: Building = { id: this.nextId++, kind, x, y, w, h, progress: done ? work : 0, workNeeded: work, done, priority: false, flooded: false };
     this.buildings.push(b);
     this.markRect(x, y, w, h, 1);
     this.markRect(x, y, w, h, 1, this.blocked);
