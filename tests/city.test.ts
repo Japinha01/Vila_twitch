@@ -125,6 +125,19 @@ describe('zonas e lotes', () => {
   });
 });
 
+describe('estradas automáticas', () => {
+  it('numa vila nova, sem zona nenhuma, os aldeões abrem estradas até os prédios sozinhos', () => {
+    const w = new World(3);
+    for (let i = 0; i < 12; i++) w.addVillager(`u${i}`, `V${i}`, '#fff');
+    for (let t = 1; t <= 6000; t++) { if (t % 600 === 0) for (let k = 0; k < 4; k++) w.addVillager(`n${t}${k}`, `N${t}${k}`, '#fff'); w.step(); }
+    expect(w.zone.includes(1)).toBe(false);
+    expect(w.road.filter((r) => r === 1).length).toBeGreaterThan(5);
+    expect(w.drainEvents().some((e) => e.includes('estradas'))).toBe(true);
+    // e o crescimento não parou: segue construindo casas
+    expect(w.buildings.filter((b) => b.kind === 'house').length).toBeGreaterThan(1);
+  });
+});
+
 describe('comércio', () => {
   it('mercados pronto reduzem o consumo de comida e água', () => {
     const mk = (markets: number): World => {

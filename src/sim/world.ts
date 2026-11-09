@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_ROAD_MAX_LEN, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -325,15 +325,17 @@ export class World {
    */
   private autoRoad(): void {
     const hall = this.townHall();
-    const hx = hall.x + hall.w / 2, hy = hall.y + hall.h / 2;
-    let goalZone = -1, gd = Infinity;
-    for (let t = 0; t < N; t++) {
-      if (!this.zone[t] || !this.zoneUnserved(t)) continue;
-      const x = t % GRID_W, y = (t - x) / GRID_W;
-      const d = (x - hx) ** 2 + (y - hy) ** 2;
-      if (d < gd) { gd = d; goalZone = t; }
+    // destinos sem estrada por perto: zonas pintadas (2, pedido do streamer) e prédios (1)
+    const goal = new Uint8Array(N);
+    let any = false;
+    for (let t = 0; t < N; t++) if (this.zone[t] && this.zoneUnserved(t)) { goal[t] = 2; any = true; }
+    for (const b of this.buildings) {
+      if (b.kind === 'townhall' || b.kind === 'bridge' || b.kind === 'dam') continue;
+      if (!this.zoneUnserved(this.idx(b.x, b.y))) continue;
+      for (let j = 0; j < b.h; j++) for (let i = 0; i < b.w; i++) { const t = this.idx(b.x + i, b.y + j); if (!goal[t]) goal[t] = 1; }
+      any = true;
     }
-    if (goalZone < 0) return;
+    if (!any) return;
     const free = (t: number): boolean => !this.occ[t] && !this.dam[t] && !this.channel[t] && this.water[t] <= 0.05 && !this.bridge[t];
     const prev = new Int32Array(N).fill(-2); // -2 não visitado, -1 origem
     const queue: number[] = [];
@@ -344,13 +346,17 @@ export class World {
       const inside = i >= hall.x && i < hall.x + hall.w && j >= hall.y && j < hall.y + hall.h;
       if (!inside) seed(this.idx(i, j));
     }
-    const gx = goalZone % GRID_W, gy = (goalZone - gx) / GRID_W;
-    let end = -1;
+    let end = -1, endGoal = 1;
     const len = new Int32Array(N);
     for (let qi = 0; qi < queue.length && end < 0; qi++) {
       const t = queue[qi];
       const x = t % GRID_W, y = (t - x) / GRID_W;
-      if (Math.abs(x - gx) + Math.abs(y - gy) <= 1) { end = t; break; }
+      let hit = 0;
+      for (let k = 0; k < 4; k++) {
+        const nx = x + DX[k], ny = y + DY[k];
+        if (nx >= 0 && ny >= 0 && nx < GRID_W && ny < GRID_H) hit = Math.max(hit, goal[this.idx(nx, ny)]);
+      }
+      if (hit) { end = t; endGoal = hit; break; }
       if (len[t] >= AUTO_ROAD_MAX_LEN) continue;
       for (let k = 0; k < 4; k++) {
         const nx = x + DX[k], ny = y + DY[k];
@@ -370,11 +376,12 @@ export class World {
       if (laid >= AUTO_ROAD_PER_PASS) break;
       const x = t % GRID_W, y = (t - x) / GRID_W;
       const c = this.canRoad(x, y);
-      if (!c.ok || this.stock.wood < (ROAD_COST.wood ?? 0) + AUTO_HOUSE_RESERVE) break;
+      // zona pedida pelo streamer tem prioridade; estrada para prédios só com folga de madeira (não rouba das obras)
+      if (!c.ok || this.stock.wood < (ROAD_COST.wood ?? 0) + (endGoal === 2 ? AUTO_HOUSE_RESERVE : AUTO_ROAD_RESERVE)) break;
       this.paintRoad(x, y);
       laid++;
     }
-    if (laid > 0 && !this.roadAnnounced) { this.roadAnnounced = true; this.events.push('🛣 Os aldeões começaram a abrir uma estrada até as zonas.'); }
+    if (laid > 0 && !this.roadAnnounced) { this.roadAnnounced = true; this.events.push('🛣 Os aldeões começaram a abrir estradas até os prédios e zonas.'); }
   }
 
   // ---------- ações dos viewers ----------

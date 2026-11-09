@@ -56,7 +56,8 @@ export const ROAD_SPEED = 1.7; // e é mais rápido
 export const MARKET_RELIEF = 0.08; // cada mercado pronto reduz o consumo de comida e água
 export const MARKET_RELIEF_MAX = 0.4;
 export const AUTO_ROAD_MAX_LEN = 40; // maior estrada que eles abrem de uma vez até uma zona
-export const AUTO_ROAD_PER_PASS = 8; // tiles de estrada por decisão
+export const AUTO_ROAD_RESERVE = 45; // madeira que precisa sobrar para fazerem estrada até um prédio
+export const AUTO_ROAD_PER_PASS = 12; // tiles de estrada por decisão
 
 export const BASE_POP_CAP = 10;
 export const HOUSE_POP = 4;
