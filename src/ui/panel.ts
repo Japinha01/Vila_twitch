@@ -207,7 +207,7 @@ export class Panel {
   // ---------- atualização por frame ----------
   update(): void {
     const w = this.world;
-    for (const e of w.drainEvents()) this.addLog(/^[🔥🌧🌊✅]/u.test(e) ? e : `🏗 ${e}`, 'ev');
+    for (const e of w.drainEvents()) this.addLog(/^[🔥🌧🌊✅⚠]/u.test(e) ? e : `🏗 ${e}`, 'ev');
     const se = w.season;
     const days = Math.max(1, Math.ceil(se.daysLeft));
     const seasonEl = $('season');
@@ -241,7 +241,8 @@ export class Panel {
     const counts: Record<string, number> = {};
     for (const v of w.villagers) counts[v.job] = (counts[v.job] ?? 0) + 1;
     const icon: Record<string, string> = { wood: '🪵', stone: '🪨', food: '🍎', water: '💧', build: '🔨' };
-    $('peoplesummary').textContent = Object.entries(counts).map(([j, n]) => `${icon[j]}${n}`).join(' ');
+    const stuck = w.villagers.filter((v) => w.isStuck(v)).length;
+    $('peoplesummary').textContent = Object.entries(counts).map(([j, n]) => `${icon[j]}${n}`).join(' ') + (stuck ? ` · 😴${stuck} sem trabalho` : '');
     const list = $('peoplelist');
     list.replaceChildren();
     const sorted = [...w.villagers].sort((a, b) => b.xp - a.xp || a.id - b.id);
@@ -251,7 +252,7 @@ export class Panel {
       const name = document.createElement('b');
       name.textContent = v.name;
       const job = document.createElement('span');
-      job.textContent = `${JOB_LABEL[v.job]} · ${v.xp} XP`;
+      job.textContent = `${JOB_LABEL[v.job]}${w.isStuck(v) ? ' 😴' : ''} · ${v.xp} XP`;
       const rm = document.createElement('button');
       rm.textContent = '✖';
       rm.title = 'Remover aldeão';

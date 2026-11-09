@@ -116,7 +116,7 @@ export class CommandProcessor {
         reply(`agora você é ${labelJob(cmd.job)}.`);
         break;
       case 'status':
-        reply(`${labelJob(v.job)} · carregando ${v.carry} · XP ${v.xp}.`);
+        reply(`${labelJob(v.job)} · carregando ${v.carry} · XP ${v.xp}.${w.isStuck(v) ? ' Sem trabalho disponível agora (estoque cheio ou sem recurso): troque de função com !trabalhar.' : ''}`);
         break;
       case 'vila': {
         const s = w.stock;
