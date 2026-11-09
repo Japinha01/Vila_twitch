@@ -1,0 +1,55 @@
+import { describe, expect, it } from 'vitest';
+import { makeLight, OverlayMirror, packKeyframe, unpackKeyframe } from '../src/cloud/frames';
+import { World } from '../src/sim/world';
+
+function busyWorld(): World {
+  const w = new World(11);
+  for (let i = 0; i < 8; i++) w.addVillager(`u${i}`, `Aldeao${i}`, '#abcdef');
+  w.requestBuild('house', 20, 14);
+  w.requestBuild('farm', 24, 16);
+  for (let i = 0; i < 400; i++) w.step();
+  return w;
+}
+
+describe('quadros do overlay', () => {
+  it('keyframe: ida e volta mantém a vila e cabe no limite de mensagem', async () => {
+    const a = busyWorld();
+    const packed = await packKeyframe(a);
+    expect(packed.length).toBeLessThan(120_000); // limite do Realtime gratuito: 250 KB
+    const save = await unpackKeyframe(packed);
+    const m = OverlayMirror.fromKeyframe(save);
+    expect(m.world!.villagers.length).toBe(a.villagers.length);
+    expect(m.world!.buildings.length).toBe(a.buildings.length);
+    expect(m.world!.nodes.length).toBe(a.nodes.length);
+    expect(m.world!.tick).toBe(a.tick);
+    expect(Array.from(m.world!.height)).toEqual(Array.from(a.height));
+  });
+
+  it('quadro leve atualiza aldeões, obras e água; quadro leve cabe em poucos KB', async () => {
+    const a = busyWorld();
+    const m = OverlayMirror.fromKeyframe(await unpackKeyframe(await packKeyframe(a)));
+    for (let i = 0; i < 100; i++) a.step();
+    const f = makeLight(a, true);
+    expect(JSON.stringify(f).length).toBeLessThan(12_000);
+    m.applyLight(f);
+    expect(m.world!.tick).toBe(a.tick);
+    expect(m.world!.buildings.map((b) => [b.id, b.progress, b.done])).toEqual(a.buildings.map((b) => [b.id, Math.round(b.progress * 100) / 100, b.done]));
+    for (let i = 0; i < 1632; i += 97) expect(Math.abs(m.world!.water[i] - a.water[i])).toBeLessThanOrEqual(1 / 64 + 1e-6);
+    // aldeões ainda em posição antiga: smooth() aproxima do alvo
+    const v0 = a.villagers[0];
+    for (let i = 0; i < 60; i++) m.smooth(1 / 60);
+    const mv = m.world!.villagers.find((v) => v.id === v0.id)!;
+    expect(Math.abs(mv.x - v0.x) + Math.abs(mv.y - v0.y)).toBeLessThan(0.05);
+  });
+
+  it('aldeão novo só aparece no próximo keyframe, e quem saiu some', async () => {
+    const a = busyWorld();
+    const m = OverlayMirror.fromKeyframe(await unpackKeyframe(await packKeyframe(a)));
+    a.addVillager('novo', 'Novo', '#fff');
+    a.removeVillager('u0');
+    m.applyLight(makeLight(a, false));
+    expect(m.world!.villagers.length).toBe(a.villagers.length - 1);
+    m.applyKeyframe(await unpackKeyframe(await packKeyframe(a)));
+    expect(m.world!.villagers.length).toBe(a.villagers.length);
+  });
+});

@@ -48,10 +48,12 @@ export class Renderer3D implements GameView {
   private cssW = 1;
   private cssH = 1;
 
-  constructor(private canvas: HTMLCanvasElement, private world: World) {
-    this.gl = new WebGLRenderer({ canvas, antialias: true });
+  /** `transparent`: fundo sem cor (overlay do OBS, a vila aparece sobre o vídeo da live). */
+  constructor(private canvas: HTMLCanvasElement, private world: World, opts: { transparent?: boolean } = {}) {
+    this.gl = new WebGLRenderer({ canvas, antialias: true, alpha: !!opts.transparent });
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.scene.background = new Color('#26323a');
+    if (opts.transparent) this.gl.setClearColor(0x000000, 0);
+    else this.scene.background = new Color('#26323a');
 
     // luz: céu azulado, sol quente de lado (as sombras entram no acabamento)
     this.scene.add(this.hemi);
@@ -227,7 +229,7 @@ export class Renderer3D implements GameView {
     const target = this.world.season.drought ? 1 : 0;
     this.mood += (target - this.mood) * 0.02;
     const m = this.mood;
-    (this.scene.background as Color).set('#26323a').lerp(this.tmpDry.set('#4a3a2c'), m);
+    if (this.scene.background) (this.scene.background as Color).set('#26323a').lerp(this.tmpDry.set('#4a3a2c'), m);
     this.sun.color.set('#fff0d0').lerp(this.tmpDry.set('#ffc880'), m);
     this.sun.intensity = 1.25 - 0.1 * m;
     this.hemi.color.set('#d6ecff').lerp(this.tmpDry.set('#ffe9c4'), m);

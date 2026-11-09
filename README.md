@@ -181,7 +181,7 @@ A vila contra desastres e ondas de inimigos controladas pelo jogo. É barato de 
 | M0 | Vila em canvas com chat **simulado** (botões que fingem comandos). Testar o feeling sem estar ao vivo. |
 | M1 | ✅ Leitura real do chat da Twitch (`!entrar`, `!trabalhar`, ...), anônima, com tmi.js. |
 | M2 | ✅ Persistência de aldeões e vila no Supabase (login com a Twitch). |
-| M3 | Painel do streamer + overlay para OBS (browser source). |
+| M3 | ✅ Painel do streamer + overlay para OBS (Fonte de navegador, via Supabase Realtime). |
 | M4 | Modo Endless completo com eventos e ranking. |
 | M5 | Eventos resgatáveis (moedas da vila primeiro, depois pontos do canal e doação). |
 | M6 | Conta do viewer (login Twitch) e cosméticos globais. |
@@ -258,3 +258,5 @@ npm run build    # gera a pasta dist/
 4. Copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (só a chave **anon**, nunca a `service_role`). Na Vercel, cadastre as mesmas duas variáveis em Settings > Environment Variables.
 
 Com isso aparece a seção "Nuvem" no painel. A vila é salva sozinha a cada 60 s; viewers que voltam numa vila nova recuperam XP e função (só os do chat real, identificados pelo ID da Twitch).
+
+**Overlay para o OBS (M3):** precisa da nuvem configurada (variáveis do Supabase; o login não é necessário). No painel, em "Overlay para o OBS", clique em Ativar overlay e copie o link. No OBS: Fontes > + > Navegador, cole o link, largura 1920 e altura 1080 (o fundo é transparente). Mantenha a aba do jogo aberta durante a live: é ela que roda a vila e transmite para o overlay, só enquanto houver um overlay aberto. O link é secreto (192 bits aleatórios); "Gerar novo link" invalida o antigo. Opções no link: `&fundo=1` (fundo sólido) e `&2d` (visual 2D). O jogo não precisa de nenhuma configuração extra no Supabase (usa canais públicos de Realtime, só o link secreto dá acesso).

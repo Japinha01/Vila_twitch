@@ -45,3 +45,14 @@ h2 small { font-weight: 400; opacity: .6; }
 #twstatus.error { color: #ff8787; }
 #twhint { font-size: 12px; color: #868e96; margin-top: 6px; }
 #twchannel { flex: 1; min-width: 0; }
+
+#ovstatus { opacity: .8; }
+#ovlink { display: flex; flex-direction: column; gap: 6px; }
+#ovurl { flex: 1; min-width: 0; font-size: 11px; }
+#ovhint { font-size: 12px; color: #868e96; }
+
+/* overlay do OBS: só a vila */
+body.overlay #side { display: none; }
+html.clear, html.clear body { background: transparent; }
+#overlaymsg { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; color: #e9ecef; text-shadow: 0 2px 6px #000; pointer-events: none; text-align: center; padding: 20px; }
+#overlaymsg[hidden] { display: none; }

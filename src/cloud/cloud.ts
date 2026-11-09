@@ -2,11 +2,7 @@ import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import type { Profile, SaveData } from '../sim/world';
 import { fromProfileRows, toProfileRows } from './rows';
 
-const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-
-/** A nuvem só liga se as duas variáveis de ambiente existirem (a chave anon é pública por desenho). */
-export const cloudConfigured = (): boolean => !!URL && !!ANON;
+import { getSupabase } from './client';
 
 export interface CloudVillage { data: SaveData; day: number; updatedAt: string }
 
@@ -15,9 +11,8 @@ export class Cloud {
   private constructor(private db: SupabaseClient, public session: Session | null) {}
 
   static async create(): Promise<Cloud | null> {
-    if (!URL || !ANON) return null;
-    const { createClient } = await import('@supabase/supabase-js'); // fora do pacote inicial
-    const db = createClient(URL, ANON, { auth: { persistSession: true, detectSessionInUrl: true } });
+    const db = await getSupabase();
+    if (!db) return null;
     const { data } = await db.auth.getSession();
     const cloud = new Cloud(db, data.session);
     db.auth.onAuthStateChange((_e, s) => { cloud.session = s; });
