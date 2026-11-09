@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vila do Chat</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <main id="stage"><canvas id="game"></canvas></main>
+      <aside id="side">
+        <header>
+          <h1>Vila do Chat</h1>
+          <div id="clock">Dia 1</div>
+        </header>
+        <section class="card">
+          <div id="speed" class="row">
+            <button data-speed="0" title="Pausa (espaço)">⏸</button>
+            <button data-speed="1" class="on">x1</button>
+            <button data-speed="2">x2</button>
+            <button data-speed="4">x4</button>
+          </div>
+          <div id="res"></div>
+          <div id="pop"></div>
+        </section>
+        <section class="card" id="chat">
+          <h2>Chat simulado</h2>
+          <div class="row">
+            <input id="who" value="viewer1" maxlength="25" aria-label="Nome do viewer" />
+            <input id="msg" value="!entrar" aria-label="Mensagem" />
+            <button id="send">Enviar</button>
+          </div>
+          <div id="quick" class="chips"></div>
+          <div class="row">
+            <button id="bots">+10 viewers</button>
+            <button id="spam">Spam (200 msgs)</button>
+          </div>
+          <div id="queueinfo"></div>
+          <div id="log" aria-live="polite"></div>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
