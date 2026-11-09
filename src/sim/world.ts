@@ -20,6 +20,7 @@ export type PlaceableKind = Exclude<BuildingKind, 'townhall'>;
 export interface Season { drought: boolean; daysLeft: number }
 
 export const SAVE_VERSION = 1;
+export interface Profile { name: string; xp: number; job: Job }
 
 /** Estado completo da vila em JSON simples. O terreno base (rio, nascentes) volta da seed. */
 export interface SaveData {
@@ -190,17 +191,31 @@ export class World {
   }
 
   // ---------- ações dos viewers ----------
+  /** Perfis dos viewers (XP e função) vindos da nuvem: quem volta numa vila nova mantém o progresso. */
+  profiles = new Map<string, Profile>();
+
+  /** Perfis conhecidos mais o estado atual dos aldeões (o maior XP vence). */
+  collectProfiles(): Map<string, Profile> {
+    const out = new Map(this.profiles);
+    for (const v of this.villagers) {
+      const old = out.get(v.userId);
+      out.set(v.userId, { name: v.name, xp: Math.max(v.xp, old?.xp ?? 0), job: v.job });
+    }
+    return out;
+  }
+
   addVillager(userId: string, name: string, color: string): AddResult {
     if (this.findVillager(userId)) return { ok: false, reason: 'exists' };
     if (this.villagers.length >= this.popCap) return { ok: false, reason: 'full' };
     const hall = this.townHall();
     const a = this.rng() * Math.PI * 2;
+    const prof = this.profiles.get(userId);
     const v: Villager = {
       id: this.nextId++, userId, name, color,
       x: hall.x + hall.w / 2 + Math.cos(a) * 2.3,
       y: hall.y + hall.h / 2 + Math.sin(a) * 2.3,
-      job: this.neediestResource(), state: 'idle', targetId: null,
-      carry: 0, carryRes: null, workLeft: 0, xp: 0, path: null, pi: 0, wait: 0,
+      job: prof?.job ?? this.neediestResource(), state: 'idle', targetId: null,
+      carry: 0, carryRes: null, workLeft: 0, xp: prof?.xp ?? 0, path: null, pi: 0, wait: 0,
     };
     this.villagers.push(v);
     return { ok: true, villager: v };

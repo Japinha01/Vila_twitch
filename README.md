@@ -180,7 +180,7 @@ A vila contra desastres e ondas de inimigos controladas pelo jogo. É barato de 
 |---|---|
 | M0 | Vila em canvas com chat **simulado** (botões que fingem comandos). Testar o feeling sem estar ao vivo. |
 | M1 | ✅ Leitura real do chat da Twitch (`!entrar`, `!trabalhar`, ...), anônima, com tmi.js. |
-| M2 | Persistência de aldeões e vila no Supabase. |
+| M2 | ✅ Persistência de aldeões e vila no Supabase (login com a Twitch). |
 | M3 | Painel do streamer + overlay para OBS (browser source). |
 | M4 | Modo Endless completo com eventos e ranking. |
 | M5 | Eventos resgatáveis (moedas da vila primeiro, depois pontos do canal e doação). |
@@ -249,3 +249,12 @@ npm run build    # gera a pasta dist/
 **Estrutura:** `src/sim` (lógica pura e determinística: relevo, água, aldeões, prédios), `src/chat` (comandos: validação → cooldown → fila → efeito), `src/render` (Canvas isométrico, vetor flat), `src/ui` (painel do streamer e chat simulado).
 
 **Chat da Twitch (M1):** no painel, digite o seu canal e clique em Conectar. A leitura é anônima (sem login nem token), então as respostas do jogo aparecem só no painel, não no chat da Twitch. O ID numérico da Twitch identifica cada viewer. O chat simulado continua para testes.
+
+**Nuvem (M2, opcional):** guarda a vila e o XP dos viewers na sua conta (Supabase + login com a Twitch). Sem configurar nada, o jogo segue só com o save do navegador. Para ligar:
+
+1. Crie um projeto grátis em supabase.com e rode `supabase/schema.sql` no SQL Editor (cria as tabelas com regras para que cada streamer só veja os próprios dados).
+2. Registre um app em dev.twitch.tv/console (tipo "Website"). Em "OAuth Redirect URLs" coloque a URL de callback que o Supabase mostra em Authentication > Providers > Twitch. Copie o Client ID e o Client Secret para esse mesmo provedor no Supabase e ative-o.
+3. Em Authentication > URL Configuration, coloque a URL do jogo (`http://localhost:5173` e a da Vercel) em Site URL / Redirect URLs.
+4. Copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (só a chave **anon**, nunca a `service_role`). Na Vercel, cadastre as mesmas duas variáveis em Settings > Environment Variables.
+
+Com isso aparece a seção "Nuvem" no painel. A vila é salva sozinha a cada 60 s; viewers que voltam numa vila nova recuperam XP e função (só os do chat real, identificados pelo ID da Twitch).

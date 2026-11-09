@@ -5,7 +5,8 @@ import type { GameView } from './render/view';
 import { TICKS_PER_SECOND } from './sim/config';
 import { World } from './sim/world';
 import { Panel } from './ui/panel';
-import { clearSave, loadGame, saveGame } from './ui/save';
+import { initCloudPanel } from './ui/cloudpanel';
+import { clearSave, loadGame, saveGame, writeSave } from './ui/save';
 
 const loaded = loadGame();
 const world = loaded ?? new World(Math.floor(Math.random() * 1e9)); // seed só para o mapa novo
@@ -83,6 +84,16 @@ const toggleTwitch = (): void => {
 twBtn.addEventListener('click', toggleTwitch);
 twInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') toggleTwitch(); });
 window.addEventListener('beforeunload', () => { void twitch.disconnect(); });
+void initCloudPanel({
+  world,
+  log: (t, c) => panel.addLog(t, c),
+  loadCloudSave: (data) => {
+    saveEnabled = false; // senão o autosave de saída sobrescreveria o save recém-gravado
+    if (!writeSave(data)) { saveEnabled = true; return false; }
+    location.reload();
+    return true;
+  },
+});
 if (loaded) panel.addLog(`💾 Vila carregada (dia ${world.day}).`, 'ev');
 
 let last = performance.now();
