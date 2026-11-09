@@ -5,6 +5,7 @@ import {
 } from 'three';
 import { BUILDINGS, GRID_H, GRID_W } from '../sim/config';
 import type { World } from '../sim/world';
+import { SceneSync } from './scenesync';
 import { buildTerrain, fillWater, HS, paintTops, waterIndices } from './terrain';
 import type { GameView, Ghost } from './view';
 
@@ -31,6 +32,7 @@ export class Renderer3D implements GameView {
   private paintFrame = 0;
 
   private overlays: Mesh[] = []; // quadras de destaque (prévia de obra e mouse)
+  private sync: SceneSync;
 
   // câmera orbital
   private yaw = Math.PI / 4;
@@ -54,6 +56,7 @@ export class Renderer3D implements GameView {
 
     this.buildWater();
     this.rebuildTerrain();
+    this.sync = new SceneSync(this.scene, world);
     for (let i = 0; i < 6; i++) {
       const m = new Mesh(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new MeshBasicMaterial({ transparent: true, opacity: 0.5, side: DoubleSide, depthWrite: false }));
       m.visible = false;
@@ -190,7 +193,9 @@ export class Renderer3D implements GameView {
       paintTops(w, col.array as Float32Array);
       col.needsUpdate = true;
     }
-    const q = fillWater(w, this.waterPos, performance.now() / 1000);
+    const now = performance.now() / 1000;
+    this.sync.update(now);
+    const q = fillWater(w, this.waterPos, now);
     this.water.geometry.setDrawRange(0, q * 6);
     (this.water.geometry.getAttribute('position') as BufferAttribute).needsUpdate = true;
 
