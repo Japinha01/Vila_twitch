@@ -81,7 +81,7 @@ describe('caminhos na vila', () => {
     const v = w.addVillager('a', 'A', '#fff');
     if (!v.ok) throw new Error('aldeão');
     // só árvores do outro lado do rio: ele precisa cruzar
-    const side = (n: { x: number }): boolean => n.x > 33;
+    const side = (n: { x: number }): boolean => n.x > 50;
     w.nodes = w.nodes.filter((n) => n.kind !== 'tree' || side(n));
     expect(w.nodes.some((n) => n.kind === 'tree')).toBe(true);
     w.setJob('a', 'wood');

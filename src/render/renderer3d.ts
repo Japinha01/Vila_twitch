@@ -12,7 +12,7 @@ import type { CameraState, GameView, Ghost } from './view';
 
 const FOV = 35;
 const MIN_DIST = 8;
-const MAX_DIST = 70;
+const MAX_DIST = 110;
 
 /** Visual 3D em baixo polígono (Three.js). A simulação não sabe que ele existe. */
 export class Renderer3D implements GameView {
@@ -163,8 +163,9 @@ export class Renderer3D implements GameView {
   resetCamera(): void {
     this.yaw = Math.PI / 4;
     this.pitch = 0.9;
-    this.dist = 30;
-    this.target.set(23, 2, 16);
+    this.dist = 34;
+    const hall = this.world.buildings[0]; // começa olhando a prefeitura
+    this.target.set(hall.x + hall.w / 2, 2, hall.y + hall.h / 2);
     this.placeCamera();
   }
 

@@ -33,7 +33,9 @@ describe('equilíbrio', () => {
     w.autonomy = false;
     w.stock = { wood: 999, stone: 10, food: 50, water: 50 };
     let s: { x: number; y: number } | null = null;
-    for (let y = 0; y < GRID_H && !s; y++) for (let x = 0; x < GRID_W && !s; x++) if (w.canPlace('quarry', x, y).ok) s = { x, y };
+    const hall = w.buildings[0];
+    let bd = Infinity;
+    for (let y = 0; y < GRID_H; y++) for (let x = 0; x < GRID_W; x++) { const d = (x - hall.x) ** 2 + (y - hall.y) ** 2; if (d < bd && w.canPlace('quarry', x, y).ok) { s = { x, y }; bd = d; } } // o mais perto da prefeitura
     const r = w.requestBuild('quarry', s!.x, s!.y);
     if (!r.ok) throw new Error('pedreira');
     r.building.done = true;

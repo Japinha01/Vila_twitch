@@ -1,7 +1,7 @@
 import {
   AUTO_BRIDGE_MAX_SPAN, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, GRID_H,
-  GRID_W, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
+  GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
   SUPPORT_BONUS, SUPPORT_MAX_TICKS, SUPPORT_TICKS, TEMPERATE_DAYS, TICKS_PER_DAY, WAREHOUSE_STORAGE,
   WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH, MAX_STEP, MAX_WADE, RETRY_TICKS, WADE_SLOW_DEPTH, FLOOD_DEPTH, DEMOLISH_REFUND, DROUGHT_WARNING_DAYS,
@@ -939,8 +939,8 @@ export class World {
    * depois moradia, armazém e produção. Uma necessidade por vez, e só se a vila se sustenta.
    */
   private autoPlan(): void {
-    if (this.buildings.filter((b) => !b.done && b.kind !== 'bridge').length >= 2) return;
     const pop = this.villagers.length;
+    if (this.buildings.filter((b) => !b.done && b.kind !== 'bridge').length >= 2 + Math.floor(pop / 10)) return; // vila maior, mais obras ao mesmo tempo
     const cap = this.storageCap;
     const fr = (r: Resource): number => this.stock[r] / cap;
     const farms = this.countKind('farm'), wells = this.countKind('well'), houses = this.countKind('house');
@@ -948,7 +948,7 @@ export class World {
     const needs: Need[] = [];
     if (farms < Math.ceil(pop / 5) && (farms === 0 || fr('food') < 0.6)) needs.push({ kind: 'farm', art: 'uma', name: 'fazenda', why: 'faltava comida' });
     if (wells < Math.ceil(pop / 6) && (wells === 0 || fr('water') < 0.6)) needs.push({ kind: 'well', art: 'um', name: 'poço', why: 'faltava água' });
-    if (pop >= this.popCap - 1 && fr('food') > 0.25 && fr('water') > 0.25) needs.push({ kind: 'house', art: 'uma', name: 'casa', why: 'faltava moradia' });
+    if (pop >= this.popCap - Math.max(1, Math.ceil(pop * 0.15)) && fr('food') > 0.25 && fr('water') > 0.25) needs.push({ kind: 'house', art: 'uma', name: 'casa', why: 'faltava moradia' });
     if (RESOURCES.some((r) => fr(r) >= 0.9) && this.countKind('warehouse') < Math.ceil(houses / 3)) needs.push({ kind: 'warehouse', art: 'um', name: 'armazém', why: 'o estoque estava cheio' });
     if (pop >= 8 && this.stock.wood < 30 && this.countKind('sawmill') === 0) needs.push({ kind: 'sawmill', art: 'uma', name: 'serraria', why: 'faltava madeira' });
     if (this.stock.stone < 20 && this.countKind('quarry') === 0) needs.push({ kind: 'quarry', art: 'uma', name: 'pedreira', why: 'faltava pedra' });
@@ -1034,7 +1034,7 @@ export class World {
     };
 
     // o rio muda de mapa para mapa: posição, curvas mais ou menos fortes
-    const riverBase = 27 + Math.floor(this.rng() * 4), riverAmp = 2 + this.rng() * 2.2, riverFreq = 0.24 + this.rng() * 0.22;
+    const riverBase = Math.round(GRID_W * 0.62) + Math.floor(this.rng() * 4), riverAmp = 2 + this.rng() * 2.2, riverFreq = 0.24 + this.rng() * 0.22;
     for (let y = 0; y < GRID_H; y++) this.rx[y] = riverBase + Math.round(Math.sin(y * riverFreq + phase) * riverAmp);
     // biomas: campo de fertilidade suave (floresta onde alto, terra pedregosa onde baixo)
     const bw = 7, bh = 6;
@@ -1055,7 +1055,7 @@ export class World {
     }
 
     // vila no terraço do meio, em um platô plano perto do rio
-    const hx = 17, hy = 15;
+    const hx = Math.round(GRID_W * 0.44), hy = Math.round(GRID_H * 0.45);
     const plat = this.baseHeight(hy);
     for (let y = hy - 2; y <= hy + 4; y++) for (let x = hx - 2; x <= hx + 4; x++) this.height[this.idx(x, y)] = plat;
 
@@ -1088,7 +1088,7 @@ export class World {
     const likes: Record<NodeKind, [number, number, number]> = { tree: [0.45, 1, 0.12], rock: [0.3, 0.12, 1], bush: [1, 0.35, 0.2] }; // [campo, floresta, pedregosa]
     const scatter = (kind: NodeKind, count: number, minDist: number, needWater: boolean): void => {
       let tries = 0;
-      while (count > 0 && tries++ < 6000) {
+      while (count > 0 && tries++ < 12000) {
         const x = 1 + Math.floor(this.rng() * (GRID_W - 2));
         const y = 1 + Math.floor(this.rng() * (GRID_H - 2));
         const i = this.idx(x, y);
@@ -1101,14 +1101,14 @@ export class World {
         count--;
       }
     };
-    scatter('tree', 50 + Math.floor(this.rng() * 24), 4, true);
-    scatter('bush', 12 + Math.floor(this.rng() * 8), 4, true);
-    scatter('rock', 16 + Math.floor(this.rng() * 12), 6, false);
+    scatter('tree', Math.round((50 + Math.floor(this.rng() * 24)) * MAP_SCALE), 4, true);
+    scatter('bush', Math.round((12 + Math.floor(this.rng() * 8)) * MAP_SCALE), 4, true);
+    scatter('rock', Math.round((16 + Math.floor(this.rng() * 12)) * MAP_SCALE), 6, false);
   }
 
   /** Lagos de formas e tamanhos variados, cada um com sua nascente; nunca perto da vila, do rio ou de degraus. */
   private carveLakes(cx0: number, cy0: number): void {
-    const count = 1 + Math.floor(this.rng() * 3) + (this.rng() < 0.3 ? 1 : 0); // 1 a 4 lagos
+    const count = Math.round((1 + Math.floor(this.rng() * 3) + (this.rng() < 0.3 ? 1 : 0)) * Math.sqrt(MAP_SCALE)); // mais lagos em mapa maior
     const placed: Array<{ x: number; y: number; r: number }> = [];
     for (let n = 0; n < count; n++) {
       for (let attempt = 0; attempt < 120; attempt++) {
