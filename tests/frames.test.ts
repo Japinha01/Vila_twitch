@@ -42,6 +42,19 @@ describe('quadros do overlay', () => {
     expect(Math.abs(mv.x - v0.x) + Math.abs(mv.y - v0.y)).toBeLessThan(0.05);
   });
 
+  it('quadro leve leva câmera, opções e apoio; sem extras não leva nada além do básico', async () => {
+    const a = busyWorld();
+    a.support();
+    const m = OverlayMirror.fromKeyframe(await unpackKeyframe(await packKeyframe(a)));
+    m.applyLight(makeLight(a, false, { c: [0.7853981, 0.9, 30, 23, 2, 16], o: { names: false, hud: true } }));
+    expect(m.camera).toEqual([0.785, 0.9, 30, 23, 2, 16]);
+    expect(m.options).toEqual({ names: false, hud: true });
+    expect(m.world!.supportActive).toBe(true);
+    const bare = makeLight(a, false);
+    expect(bare.c).toBeUndefined();
+    expect(bare.o).toBeUndefined();
+  });
+
   it('aldeão novo só aparece no próximo keyframe, e quem saiu some', async () => {
     const a = busyWorld();
     const m = OverlayMirror.fromKeyframe(await unpackKeyframe(await packKeyframe(a)));

@@ -8,7 +8,7 @@ import type { World } from '../sim/world';
 import { makeBuilding } from './models';
 import { SceneSync } from './scenesync';
 import { buildTerrain, fillWater, HS, paintTops, waterIndices } from './terrain';
-import type { GameView, Ghost } from './view';
+import type { CameraState, GameView, Ghost } from './view';
 
 const FOV = 35;
 const MIN_DIST = 8;
@@ -145,6 +145,18 @@ export class Renderer3D implements GameView {
     );
     this.camera.lookAt(t);
   }
+
+  getCamera(): CameraState {
+    return { yaw: this.yaw, pitch: this.pitch, dist: this.dist, tx: this.target.x, ty: this.target.y, tz: this.target.z };
+  }
+
+  setCamera(c: CameraState): void {
+    this.yaw = c.yaw; this.pitch = c.pitch; this.dist = c.dist;
+    this.target.set(c.tx, c.ty, c.tz);
+    this.placeCamera();
+  }
+
+  setNames(on: boolean): void { this.sync.names = on; }
 
   resetCamera(): void {
     this.yaw = Math.PI / 4;

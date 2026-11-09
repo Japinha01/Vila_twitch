@@ -56,3 +56,11 @@ body.overlay #side { display: none; }
 html.clear, html.clear body { background: transparent; }
 #overlaymsg { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; color: #e9ecef; text-shadow: 0 2px 6px #000; pointer-events: none; text-align: center; padding: 20px; }
 #overlaymsg[hidden] { display: none; }
+
+.check { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+#hud { position: absolute; left: 24px; top: 24px; padding: 12px 16px; background: rgba(20,26,30,.72); border-radius: 12px; color: #fff; font-size: 22px; display: flex; flex-direction: column; gap: 6px; min-width: 260px; text-shadow: 0 1px 3px #000; pointer-events: none; }
+#hud[hidden] { display: none; }
+#hud .hudtop { display: flex; justify-content: space-between; gap: 16px; }
+#hud .hudtop .drought { color: #ffa94d; }
+#hud .hudres { display: flex; gap: 14px; }
+#hud .hudpop { font-size: 18px; opacity: .9; }

@@ -85,7 +85,7 @@ const toggleTwitch = (): void => {
 twBtn.addEventListener('click', toggleTwitch);
 twInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') toggleTwitch(); });
 window.addEventListener('beforeunload', () => { void twitch.disconnect(); });
-initOverlayPanel(world, (t, c) => panel.addLog(t, c));
+initOverlayPanel(world, renderer, (t, c) => panel.addLog(t, c));
 void initCloudPanel({
   world,
   log: (t, c) => panel.addLog(t, c),

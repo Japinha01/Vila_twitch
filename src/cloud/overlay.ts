@@ -2,7 +2,7 @@ import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import type { SaveData } from '../sim/world';
 import type { World } from '../sim/world';
 import { getSupabase } from './client';
-import { makeLight, packKeyframe, unpackKeyframe, type LightFrame } from './frames';
+import { makeLight, packKeyframe, unpackKeyframe, type LightExtras, type LightFrame } from './frames';
 
 const LIGHT_MS = 333; // ~3 quadros leves por segundo
 const WATER_EVERY = 3; // a água vai a cada 3 quadros leves (~1 por segundo)
@@ -30,7 +30,12 @@ export class OverlayHost {
   private packing = false;
   viewers = 0;
 
-  constructor(private world: World, private token: string, private onChange: (viewers: number, error?: string) => void) {}
+  constructor(
+    private world: World,
+    private token: string,
+    private onChange: (viewers: number, error?: string) => void,
+    private extras: () => LightExtras = () => ({}),
+  ) {}
 
   async start(): Promise<boolean> {
     this.db = await getSupabase();
@@ -75,7 +80,7 @@ export class OverlayHost {
       catch { /* o próximo ciclo tenta de novo */ }
       this.packing = false;
     }
-    void ch.send({ type: 'broadcast', event: 'light', payload: makeLight(this.world, this.n++ % WATER_EVERY === 0) });
+    void ch.send({ type: 'broadcast', event: 'light', payload: makeLight(this.world, this.n++ % WATER_EVERY === 0, this.extras()) });
   }
 }
 

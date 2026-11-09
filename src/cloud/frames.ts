@@ -8,8 +8,19 @@ import { World, type SaveData } from '../sim/world';
  *  - keyframe: a vila inteira (sem rotas), compactada; sai de tempos em tempos e quando um overlay entra.
  *  - light: só o que muda a cada instante (aldeões, prédios, estoque e, de vez em quando, a água).
  */
+/**
+ * ATENÇÃO (segredos): o quadro leve é uma lista branca do que é público na live. Informação secreta
+ * (ex.: objetivos da Guerra de Objetivos) nunca entra aqui nem no keyframe: fica só no servidor.
+ */
+export interface OverlayOptions { names: boolean; hud: boolean }
+export type CameraArr = [number, number, number, number, number, number]; // yaw, pitch, dist, tx, ty, tz
+export interface LightExtras { c?: CameraArr; o?: OverlayOptions }
+
 export interface LightFrame {
   t: number; // tick
+  su: number; // até quando o apoio ✨ vale
+  c?: CameraArr; // câmera do streamer
+  o?: [number, number]; // opções do overlay: nomes, status
   s: Stock;
   v: Array<[number, number, number, number, number]>; // id, x, y, estado, recurso carregado (-1 = nenhum)
   b: Array<[number, number, number, number, number, number, number, number, number, number]>; // id, tipo, x, y, w, h, progresso, trabalho, pronto, alagado
@@ -46,13 +57,16 @@ export async function unpackKeyframe(b64: string): Promise<SaveData> {
 }
 
 // ---------- quadro leve ----------
-export function makeLight(world: World, withWater: boolean): LightFrame {
+export function makeLight(world: World, withWater: boolean, extras: LightExtras = {}): LightFrame {
   const f: LightFrame = {
     t: world.tick,
+    su: world.supportUntil,
     s: { ...world.stock },
     v: world.villagers.map((v) => [v.id, round2(v.x), round2(v.y), STATES.indexOf(v.state), v.carryRes ? RESOURCES.indexOf(v.carryRes) : -1]),
     b: world.buildings.map((b) => [b.id, KINDS.indexOf(b.kind), b.x, b.y, b.w, b.h, round2(b.progress), b.workNeeded, b.done ? 1 : 0, b.flooded ? 1 : 0]),
   };
+  if (extras.c) f.c = extras.c.map((n) => Math.round(n * 1000) / 1000) as CameraArr;
+  if (extras.o) f.o = [extras.o.names ? 1 : 0, extras.o.hud ? 1 : 0];
   if (withWater) {
     const q = new Uint8Array(N);
     for (let i = 0; i < N; i++) q[i] = Math.min(255, Math.round(world.water[i] * WATER_SCALE));
@@ -69,6 +83,9 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 export class OverlayMirror {
   readonly world: World | null;
   private target = new Map<number, { x: number; y: number }>();
+  /** câmera do streamer e opções do overlay, vindas do último quadro leve */
+  camera: CameraArr | null = null;
+  options: OverlayOptions = { names: true, hud: true };
 
   constructor(world: World | null = null) { this.world = world; }
 
@@ -88,6 +105,9 @@ export class OverlayMirror {
     const w = this.world!;
     w.tick = f.t;
     w.stock = { ...f.s };
+    w.supportUntil = f.su;
+    if (f.c) this.camera = f.c;
+    if (f.o) this.options = { names: !!f.o[0], hud: !!f.o[1] };
     const known = new Map(w.villagers.map((v) => [v.id, v]));
     const next: Villager[] = [];
     this.target.clear();
