@@ -1,4 +1,5 @@
 import { CommandProcessor } from './chat/commands';
+import { TwitchChat } from './chat/twitch';
 import { Renderer } from './render/renderer';
 import type { GameView } from './render/view';
 import { TICKS_PER_SECOND } from './sim/config';
@@ -56,6 +57,32 @@ panel.onNew = () => {
   clearSave();
   location.reload();
 };
+// ---- chat real da Twitch (leitura anônima); o chat simulado continua disponível ----
+const CHANNEL_KEY = 'vila-do-chat:canal';
+const twInput = document.getElementById('twchannel') as HTMLInputElement;
+const twBtn = document.getElementById('twconnect') as HTMLButtonElement;
+const twStatus = document.getElementById('twstatus')!;
+try { twInput.value = localStorage.getItem(CHANNEL_KEY) ?? ''; } catch { /* sem armazenamento */ }
+const STATUS_TEXT = { disconnected: 'desconectado', connecting: 'conectando…', connected: 'conectado', error: 'erro' } as const;
+const twitch = new TwitchChat(
+  (msg) => { panel.addLog(`${msg.user}: ${msg.text}`, 'me'); chat.submit(msg); },
+  (s, detail) => {
+    twStatus.textContent = STATUS_TEXT[s];
+    twStatus.className = s;
+    twBtn.textContent = s === 'connected' || s === 'connecting' ? 'Desconectar' : 'Conectar';
+    if (s === 'connected') panel.addLog(`📺 Lendo o chat de #${detail}.`, 'ev');
+    else if (s === 'error') panel.addLog(`⚠ ${detail}`, 'ev');
+    else if (s === 'disconnected') panel.addLog('📺 Chat da Twitch desconectado.', 'ev');
+  },
+);
+const toggleTwitch = (): void => {
+  if (twitch.status === 'connected' || twitch.status === 'connecting') { void twitch.disconnect(); return; }
+  try { localStorage.setItem(CHANNEL_KEY, twInput.value.trim()); } catch { /* ok */ }
+  void twitch.connect(twInput.value);
+};
+twBtn.addEventListener('click', toggleTwitch);
+twInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') toggleTwitch(); });
+window.addEventListener('beforeunload', () => { void twitch.disconnect(); });
 if (loaded) panel.addLog(`💾 Vila carregada (dia ${world.day}).`, 'ev');
 
 let last = performance.now();
