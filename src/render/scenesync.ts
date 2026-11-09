@@ -35,6 +35,11 @@ export class SceneSync {
   names = false;
   private nameSprites = new Map<number, Sprite>();
   private nameTex = new Map<string, CanvasTexture>();
+  // interpolação entre ticks: a simulação anda a 10 passos/s; o vídeo, a 60 quadros/s
+  private pos = new Map<number, { fx: number; fy: number; tx: number; ty: number; x: number; y: number }>();
+  private lastTick = -1;
+  private tickAt = 0;
+  private interval = 0.1;
   private ring: Mesh;
   private label: Sprite | null = null;
   private labelFor = -1;
@@ -60,7 +65,43 @@ export class SceneSync {
     scene.add(this.ring);
   }
 
+  /**
+   * Posição suave dos aldeões: a cada tick novo, parte de onde o aldeão está sendo mostrado e vai até a
+   * posição nova no tempo médio entre ticks. Fica um tick atrasado, mas sem saltos (serve também para
+   * o overlay, onde os "ticks" são os quadros recebidos).
+   */
+  private smoothPositions(time: number): void {
+    const w = this.world;
+    if (w.tick !== this.lastTick) {
+      if (this.lastTick >= 0 && time > this.tickAt) this.interval = Math.min(0.4, Math.max(0.03, this.interval * 0.7 + (time - this.tickAt) * 0.3));
+      this.lastTick = w.tick;
+      this.tickAt = time;
+      const seen = new Set<number>();
+      for (const v of w.villagers) {
+        seen.add(v.id);
+        const p = this.pos.get(v.id);
+        if (!p) { this.pos.set(v.id, { fx: v.x, fy: v.y, tx: v.x, ty: v.y, x: v.x, y: v.y }); continue; }
+        const far = Math.abs(v.x - p.x) + Math.abs(v.y - p.y) > 4; // teleporte (expulso de prédio, vila nova): sem animação
+        p.fx = far ? v.x : p.x;
+        p.fy = far ? v.y : p.y;
+        p.tx = v.x; p.ty = v.y;
+      }
+      for (const id of this.pos.keys()) if (!seen.has(id)) this.pos.delete(id);
+    }
+    const a = Math.min(1, (time - this.tickAt) / this.interval);
+    for (const p of this.pos.values()) {
+      p.x = p.fx + (p.tx - p.fx) * a;
+      p.y = p.fy + (p.ty - p.fy) * a;
+    }
+  }
+
+  /** Posição mostrada do aldeão (suavizada). */
+  private at(v: Villager): { x: number; y: number } {
+    return this.pos.get(v.id) ?? v;
+  }
+
   update(time: number, camera: Camera, selectedId: number | null): void {
+    this.smoothPositions(time);
     this.syncNodes();
     this.syncBuildings(camera);
     this.syncVillagers(time);
@@ -105,7 +146,8 @@ export class SceneSync {
         (sp.material as SpriteMaterial).map = tex;
         sp.material.needsUpdate = true;
       }
-      sp.position.set(v.x, this.world.groundZ(v.x, v.y) * HS + 0.78, v.y);
+      const q = this.at(v);
+      sp.position.set(q.x, this.world.groundZ(q.x, q.y) * HS + 0.78, q.y);
     }
     for (const [id, sp] of this.nameSprites) if (!seen.has(id)) { this.scene.remove(sp); sp.material.dispose(); this.nameSprites.delete(id); }
   }
@@ -116,8 +158,9 @@ export class SceneSync {
     const v = selectedId === null ? undefined : this.world.villagers.find((q) => q.id === selectedId);
     this.ring.visible = !!v;
     if (!v) { if (this.label) this.label.visible = false; return; }
-    const y = this.world.groundZ(v.x, v.y) * HS;
-    this.ring.position.set(v.x, y + 0.03, v.y);
+    const q = this.at(v);
+    const y = this.world.groundZ(q.x, q.y) * HS;
+    this.ring.position.set(q.x, y + 0.03, q.y);
     if (this.labelFor !== v.id) {
       if (this.label) { this.scene.remove(this.label); (this.label.material as SpriteMaterial).map?.dispose(); }
       const c = document.createElement('canvas');
@@ -136,7 +179,7 @@ export class SceneSync {
       this.labelFor = v.id;
     }
     this.label!.visible = true;
-    this.label!.position.set(v.x, y + 0.95, v.y);
+    this.label!.position.set(q.x, y + 0.95, q.y);
     void camera;
   }
 
@@ -244,16 +287,17 @@ export class SceneSync {
     list.forEach((v: Villager, i: number) => {
       const moving = v.state === 'toTarget' || v.state === 'toStore';
       const bob = moving ? Math.abs(Math.sin(time * 9 + v.id)) * 0.04 : v.state === 'working' ? Math.sin(time * 12 + v.id) * 0.02 : 0;
-      const y = w.groundZ(v.x, v.y) * HS + bob;
+      const q = this.at(v);
+      const y = w.groundZ(q.x, q.y) * HS + bob;
       d.rotation.set(0, 0, 0);
       d.scale.set(1, 1, 1);
-      d.position.set(v.x, y + 0.17, v.y);
+      d.position.set(q.x, y + 0.17, q.y);
       d.updateMatrix();
       this.bodies.setMatrixAt(i, d.matrix);
-      d.position.set(v.x, y + 0.45, v.y);
+      d.position.set(q.x, y + 0.45, q.y);
       d.updateMatrix();
       this.heads.setMatrixAt(i, d.matrix);
-      d.position.set(v.x + 0.12, y + 0.3, v.y + 0.05);
+      d.position.set(q.x + 0.12, y + 0.3, q.y + 0.05);
       d.scale.setScalar(v.carryRes ? 1 : 0.0001); // sem carga: some
       d.updateMatrix();
       this.loads.setMatrixAt(i, d.matrix);

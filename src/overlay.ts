@@ -50,8 +50,42 @@ export async function runOverlay(
     if (html !== hudText) { hudText = html; hud.innerHTML = html; }
   };
 
-  // câmera: acompanha suave a do streamer
-  let cam: number[] | null = null;
+  // câmera: acompanha a do streamer; quem mexeu por último manda (útil para testar o link numa aba comum)
+  let cam: number[] | null = null; // câmera mostrada
+  let goal: number[] | null = null; // para onde ela vai
+  let lastHost: CameraArr | null = null;
+  const fromView = (): void => {
+    const c = view?.getCamera?.();
+    if (c) { cam = goal = [c.yaw, c.pitch, c.dist, c.tx, c.ty, c.tz]; }
+  };
+  const hostMoved = (t: CameraArr): boolean => !lastHost || t.some((n, i) => Math.abs(n - lastHost![i]) > 0.002);
+
+  // controles locais (no OBS a fonte não recebe mouse, então só valem numa aba normal)
+  const stage = document.getElementById('stage')!;
+  const local = (x: number, y: number): { x: number; y: number } => { const r = stage.getBoundingClientRect(); return { x: x - r.left, y: y - r.top }; };
+  stage.addEventListener('wheel', (e) => {
+    if (!view) return;
+    e.preventDefault();
+    const p = local(e.clientX, e.clientY);
+    view.zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, p.x, p.y);
+    fromView();
+  }, { passive: false });
+  let drag: { x: number; y: number } | null = null;
+  stage.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointerup', () => { drag = null; });
+  stage.addEventListener('pointermove', (e) => {
+    if (!drag || !view) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag = { x: e.clientX, y: e.clientY };
+    if (e.buttons & 4 || e.buttons & 2) view.rotateBy?.(dx); else view.panBy(dx, dy);
+    fromView();
+  });
+  stage.addEventListener('contextmenu', (e) => e.preventDefault());
+  window.addEventListener('keydown', (e) => {
+    if (!view) return;
+    if (e.key === 'q' || e.key === 'Q') { view.rotateBy?.(-130); fromView(); }
+    if (e.key === 'e' || e.key === 'E') { view.rotateBy?.(130); fromView(); }
+  });
 
   const startView = async (m: OverlayMirror): Promise<void> => {
     if (!params.has('2d')) {
@@ -85,17 +119,21 @@ export async function runOverlay(
     },
   });
   void viewer.start();
+  // gancho para testes no navegador / depuração
+  (window as unknown as { __vilaOverlay: unknown }).__vilaOverlay = { get view() { return view; }, get mirror() { return mirror; } };
 
   let last = performance.now();
   function frame(now: number): void {
     const dt = Math.min(0.25, (now - last) / 1000);
     last = now;
     if (mirror && view) {
-      mirror.smooth(dt);
       if (view.setCamera && mirror.camera) {
         const t: CameraArr = mirror.camera;
-        const k = cam ? 1 - Math.exp(-dt * 8) : 1; // primeiro quadro: sem animação
-        cam = cam ? cam.map((c, i) => c + (t[i] - c) * k) : [...t];
+        if (hostMoved(t)) { goal = [...t]; if (!cam) cam = [...t]; lastHost = [...t]; }
+      }
+      if (view.setCamera && cam && goal) {
+        const k = 1 - Math.exp(-dt * 10);
+        cam = cam.map((c, i) => c + (goal![i] - c) * k);
         view.setCamera({ yaw: cam[0], pitch: cam[1], dist: cam[2], tx: cam[3], ty: cam[4], tz: cam[5] });
       }
       view.setNames?.(mirror.options.names);

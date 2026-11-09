@@ -25,7 +25,7 @@ describe('quadros do overlay', () => {
     expect(Array.from(m.world!.height)).toEqual(Array.from(a.height));
   });
 
-  it('quadro leve atualiza aldeões, obras e água; quadro leve cabe em poucos KB', async () => {
+  it('quadro leve (com água) atualiza aldeões, obras e água; quadro leve cabe em poucos KB', async () => {
     const a = busyWorld();
     const m = OverlayMirror.fromKeyframe(await unpackKeyframe(await packKeyframe(a)));
     for (let i = 0; i < 100; i++) a.step();
@@ -35,11 +35,20 @@ describe('quadros do overlay', () => {
     expect(m.world!.tick).toBe(a.tick);
     expect(m.world!.buildings.map((b) => [b.id, b.progress, b.done])).toEqual(a.buildings.map((b) => [b.id, Math.round(b.progress * 100) / 100, b.done]));
     for (let i = 0; i < 1632; i += 97) expect(Math.abs(m.world!.water[i] - a.water[i])).toBeLessThanOrEqual(1 / 64 + 1e-6);
-    // aldeões ainda em posição antiga: smooth() aproxima do alvo
+    // aldeões vão direto para a posição recebida (quem suaviza é o visual 3D)
     const v0 = a.villagers[0];
-    for (let i = 0; i < 60; i++) m.smooth(1 / 60);
     const mv = m.world!.villagers.find((v) => v.id === v0.id)!;
-    expect(Math.abs(mv.x - v0.x) + Math.abs(mv.y - v0.y)).toBeLessThan(0.05);
+    expect(Math.abs(mv.x - v0.x) + Math.abs(mv.y - v0.y)).toBeLessThan(0.02);
+  });
+
+  it('quadro leve sem água não mexe nos prédios', async () => {
+    const a = busyWorld();
+    const m = OverlayMirror.fromKeyframe(await unpackKeyframe(await packKeyframe(a)));
+    const f = makeLight(a, false);
+    expect(f.b).toBeUndefined();
+    const before = m.world!.buildings;
+    m.applyLight(f);
+    expect(m.world!.buildings).toBe(before);
   });
 
   it('quadro leve leva câmera, opções e apoio; sem extras não leva nada além do básico', async () => {
