@@ -20,6 +20,8 @@ const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) 
 /** Painel lateral: construção do streamer, recursos, velocidade e chat simulado. */
 export class Panel {
   speed = 1;
+  onSave: () => void = () => {};
+  onNew: () => void = () => {};
   private tool: Tool = { type: 'none' };
   private log = $('log');
   private resEl = $('res');
@@ -35,6 +37,8 @@ export class Panel {
     this.initPalette();
     this.initChat();
     this.initMap();
+    $('save').addEventListener('click', () => this.onSave());
+    $('newgame').addEventListener('click', () => this.onNew());
   }
 
   // ---------- velocidade ----------
