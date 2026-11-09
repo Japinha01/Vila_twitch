@@ -30,6 +30,7 @@ export class Renderer {
   private dpr = 1;
   ghost: Ghost | null = null;
   hoverTile: { x: number; y: number } | null = null;
+  selectedId: number | null = null;
 
   constructor(private canvas: HTMLCanvasElement, private world: World) {
     this.ctx = canvas.getContext('2d')!;
@@ -57,6 +58,13 @@ export class Renderer {
     const cx = ((23 - 16) * TW) / 2, cy = ((23 + 16) * TH) / 2 - 4 * ZH;
     this.ox = this.canvas.width / 2 - cx * this.s;
     this.oy = this.canvas.height / 2 - cy * this.s;
+  }
+
+  /** Centraliza a câmera num ponto do mundo (coordenadas de tile). */
+  centerOn(x: number, y: number): void {
+    const z = this.world.groundZ(x, y);
+    this.ox = this.canvas.width / 2 - ((x - y) * TW / 2) * this.s;
+    this.oy = this.canvas.height / 2 - ((x + y) * TH / 2 - z * ZH) * this.s;
   }
 
   panBy(dxCss: number, dyCss: number): void { this.ox += dxCss * this.dpr; this.oy += dyCss * this.dpr; }
@@ -311,6 +319,10 @@ export class Renderer {
     this.circle(x, y - r * 2.05, r * 0.7, '#ffe3c4');
     if (v.carryRes) { ctx.fillStyle = RES_COLOR[v.carryRes]; ctx.fillRect(x + r * 0.6, y - r * 2.4, r * 0.9, r * 0.9); }
     if (v.state === 'working') this.circle(x - r * 1.2, y - r * 2.2, r * 0.25, '#fff');
+    if (v.id === this.selectedId) {
+      ctx.strokeStyle = '#ffd43b'; ctx.lineWidth = Math.max(2, this.s * 2.5);
+      ctx.beginPath(); ctx.ellipse(x, y, r * 1.6, r * 0.7, 0, 0, Math.PI * 2); ctx.stroke();
+    }
   }
 
   private drawLabel(v: Villager): void {

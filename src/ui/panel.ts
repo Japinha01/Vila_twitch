@@ -3,6 +3,7 @@ import { BUILDINGS, RESOURCE_LABEL } from '../sim/config';
 import { RESOURCES, type Resource } from '../sim/types';
 import type { PlaceableKind, World } from '../sim/world';
 import type { Renderer } from '../render/renderer';
+import { describeTile, JOB_LABEL } from './info';
 
 const ICON: Record<Resource, string> = { wood: '🪵', stone: '🪨', food: '🍎', water: '💧' };
 const COLOR: Record<Resource, string> = { wood: '#c58b4e', stone: '#adb5bd', food: '#ff6b6b', water: '#4dabf7' };
@@ -24,6 +25,9 @@ export class Panel {
   private resEl = $('res');
   private botN = 0;
   private paletteBtns = new Map<PlaceableKind, HTMLButtonElement>();
+  private tip = $('tip');
+  private lastPeople = 0;
+  private selected: number | null = null;
 
   constructor(private world: World, private chat: CommandProcessor, private view: Renderer) {
     chat.onReply = (to, t) => this.addLog(`@${to} ${t}`, 'bot');
@@ -99,7 +103,9 @@ export class Panel {
         drag.x = e.clientX; drag.y = e.clientY;
         if (drag.moved > 6) this.view.panBy(dx, dy);
       }
-      this.hover(this.view.pickTile(p.x, p.y));
+      const tile = this.view.pickTile(p.x, p.y);
+      this.hover(tile);
+      this.showTip(tile, e.clientX, e.clientY);
     });
     cv.addEventListener('pointerup', (e) => {
       const wasClick = drag && drag.moved <= 6 && drag.button === 0;
@@ -108,13 +114,22 @@ export class Panel {
       const p = local(e);
       this.click(this.view.pickTile(p.x, p.y));
     });
-    cv.addEventListener('pointerleave', () => { this.view.hoverTile = null; this.view.ghost = null; });
+    cv.addEventListener('pointerleave', () => { this.view.hoverTile = null; this.view.ghost = null; this.tip.hidden = true; });
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
       const p = local(e);
       this.view.zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, p.x, p.y);
     }, { passive: false });
     cv.addEventListener('dblclick', () => this.view.resetCamera());
+  }
+
+  private showTip(t: { x: number; y: number } | null, cx: number, cy: number): void {
+    if (!t || this.tool.type === 'build') { this.tip.hidden = true; return; }
+    this.tip.textContent = describeTile(this.world, t.x, t.y).join('\n');
+    this.tip.hidden = false;
+    const w = this.tip.offsetWidth, h = this.tip.offsetHeight;
+    this.tip.style.left = `${Math.min(window.innerWidth - w - 8, cx + 14)}px`;
+    this.tip.style.top = `${Math.min(window.innerHeight - h - 8, cy + 14)}px`;
   }
 
   private hover(t: { x: number; y: number } | null): void {
@@ -206,9 +221,47 @@ export class Panel {
       const cost = BUILDINGS[k].cost;
       b.classList.toggle('off', RESOURCES.some((r) => w.stock[r] < (cost[r] ?? 0)));
     });
+    this.updatePeople();
     if (this.view.ghost) {
       const g = this.view.ghost;
       g.ok = w.canPlace(g.kind, g.x, g.y).ok;
+    }
+  }
+
+  /** Lista de aldeões (atualizada a cada meio segundo para não pesar). */
+  private updatePeople(): void {
+    const now = performance.now();
+    if (now - this.lastPeople < 500) return;
+    this.lastPeople = now;
+    const w = this.world;
+    const counts: Record<string, number> = {};
+    for (const v of w.villagers) counts[v.job] = (counts[v.job] ?? 0) + 1;
+    const icon: Record<string, string> = { wood: '🪵', stone: '🪨', food: '🍎', water: '💧', build: '🔨' };
+    $('peoplesummary').textContent = Object.entries(counts).map(([j, n]) => `${icon[j]}${n}`).join(' ');
+    const list = $('peoplelist');
+    list.replaceChildren();
+    const sorted = [...w.villagers].sort((a, b) => b.xp - a.xp || a.id - b.id);
+    for (const v of sorted) {
+      const row = document.createElement('div');
+      row.className = `person${v.id === this.selected ? ' sel' : ''}`;
+      const name = document.createElement('b');
+      name.textContent = v.name;
+      const job = document.createElement('span');
+      job.textContent = `${JOB_LABEL[v.job]} · ${v.xp} XP`;
+      const rm = document.createElement('button');
+      rm.textContent = '✖';
+      rm.title = 'Remover aldeão';
+      rm.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (w.removeVillager(v.userId)) this.addLog(`${v.name} foi removido da vila.`, 'ev');
+      });
+      row.addEventListener('click', () => {
+        this.selected = v.id;
+        this.view.selectedId = v.id;
+        this.view.centerOn(v.x, v.y);
+      });
+      row.append(name, job, rm);
+      list.appendChild(row);
     }
   }
 }
