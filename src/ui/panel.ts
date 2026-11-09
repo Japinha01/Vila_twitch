@@ -36,6 +36,14 @@ export class Panel {
     this.initSpeed();
     this.initPalette();
     this.initChat();
+    const seedEl = $('seedinfo');
+    seedEl.textContent = `🗺 Seed do mapa: ${world.seed} (clique para copiar)`;
+    seedEl.addEventListener('click', () => {
+      void navigator.clipboard?.writeText(String(world.seed)).then(() => this.addLog(`🗺 Seed ${world.seed} copiada. Use em "Nova vila" ou na URL com ?seed=${world.seed}`, 'ev'), () => { /* sem permissão */ });
+    });
+    const auto = $<HTMLInputElement>('autonomy');
+    auto.checked = world.autonomy;
+    auto.addEventListener('change', () => { world.autonomy = auto.checked; this.addLog(auto.checked ? '🧑‍🤝‍🧑 Aldeões autônomos: ligado.' : '🧑‍🤝‍🧑 Aldeões autônomos: desligado.', 'ev'); });
     this.initMap();
     $('save').addEventListener('click', () => this.onSave());
     $('newgame').addEventListener('click', () => this.onNew());
@@ -255,7 +263,7 @@ export class Panel {
       const name = document.createElement('b');
       name.textContent = v.name;
       const job = document.createElement('span');
-      job.textContent = `${JOB_LABEL[v.job]}${w.isStuck(v) ? ' 😴' : ''} · ${v.xp} XP`;
+      job.textContent = `${JOB_LABEL[v.job]}${v.ordered ? '' : ' (livre)'}${w.isStuck(v) ? ' 😴' : ''} · ${v.xp} XP`;
       const rm = document.createElement('button');
       rm.textContent = '✖';
       rm.title = 'Remover aldeão';

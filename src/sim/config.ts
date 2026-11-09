@@ -39,6 +39,12 @@ export const CARRY_CAPACITY = 5;
 export const CONSUME_EVERY = 150;
 export const STARVING_SLOWDOWN = 0.5;
 
+// ---- autonomia dos aldeões ----
+export const AUTONOMY_EVERY = 100; // ticks entre decisões (10 s no x1)
+export const AUTO_JOB_MARGIN = 15; // só troca de profissão se a nova for bem mais necessária
+export const AUTO_HOUSE_RESERVE = 10; // madeira que sobra depois de uma casa feita sozinhos
+export const AUTO_BUILD_MAX_DIST = 14; // alcance da procura de terreno ao redor da prefeitura
+
 export const BASE_POP_CAP = 10;
 export const HOUSE_POP = 4;
 export const BASE_STORAGE = 100;

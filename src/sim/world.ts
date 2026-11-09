@@ -1,5 +1,5 @@
 import {
-  BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, GRID_H,
   GRID_W, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -33,6 +33,7 @@ export interface SaveData {
   rngState: number;
   prevDrought: boolean;
   warned?: boolean;
+  autonomy?: boolean;
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
   buildings: Building[];
   nodes: ResourceNode[];
@@ -64,6 +65,8 @@ export class World {
   tick = 0;
   /** sobe sempre que o relevo muda (represa construída ou demolida); o visual 3D refaz o terreno */
   terrainVersion = 0;
+  /** aldeões sem ordem decidem a profissão e constroem casas sozinhos, gastando o estoque da vila */
+  autonomy = true;
   stock: Stock = { ...START_STOCK };
   villagers: Villager[] = [];
   buildings: Building[] = [];
@@ -106,7 +109,7 @@ export class World {
   serialize(): SaveData {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
-      supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned,
+      supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy,
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -143,6 +146,7 @@ export class World {
     this.nextId = data.nextId;
     this.prevDrought = data.prevDrought;
     this.warned = data.warned ?? false;
+    this.autonomy = data.autonomy ?? true;
     this.rng.setState(data.rngState);
     this.villagers = data.villagers.map((v) => ({ ...v, workLeft: v.workLeft ?? Infinity }));
     this.buildings = data.buildings.map((b) => ({ ...b }));
@@ -243,7 +247,16 @@ export class World {
     const v = this.findVillager(userId);
     if (!v) return false;
     v.job = job;
+    v.ordered = true;
     this.resetTask(v);
+    return true;
+  }
+
+  /** O viewer devolve a decisão ao aldeão (!livre). */
+  setFree(userId: string): boolean {
+    const v = this.findVillager(userId);
+    if (!v) return false;
+    v.ordered = false;
     return true;
   }
 
@@ -347,6 +360,7 @@ export class World {
   // ---------- simulação ----------
   step(): void {
     this.tick++;
+    if (this.autonomy && this.tick % AUTONOMY_EVERY === 0) this.autonomyStep();
     const drought = this.season.drought;
     const se = this.season;
     if (!drought && !this.warned && se.daysLeft <= DROUGHT_WARNING_DAYS) {
@@ -700,11 +714,74 @@ export class World {
   }
 
   /** Profissão inicial: o recurso mais escasso, descontando quem já trabalha nele. */
-  private neediestResource(): Resource {
-    const score = (r: Resource): number => this.stock[r] + 12 * this.villagers.filter((v) => v.job === r).length;
+  private neediestResource(except?: Villager): Resource {
+    const score = (r: Resource): number => this.stock[r] + 12 * this.villagers.filter((v) => v !== except && v.job === r).length;
     let best: Resource = 'wood';
     for (const r of RESOURCES) if (score(r) < score(best)) best = r;
     return best;
+  }
+
+  // ---------- autonomia ----------
+  /** Decisões dos aldeões sem ordem: profissão e casas. Determinístico (sem sorteio). */
+  private autonomyStep(): void {
+    this.autoJobs();
+    this.autoHouse();
+  }
+
+  private autoJobs(): void {
+    const builders = (): number => this.villagers.filter((v) => v.job === 'build').length;
+    const openSites = this.buildings.filter((b) => !b.done).length;
+    const score = (r: Resource): number => this.stock[r] + 12 * this.villagers.filter((v) => v.job === r).length;
+    for (const v of this.villagers) {
+      if (v.ordered) continue;
+      if ((this.tick / AUTONOMY_EVERY + v.id) % 3 !== 0) continue; // cada aldeão reavalia a cada ~30 s, em turnos
+      const stuck = this.isStuck(v);
+      let best: Job = v.job;
+      // há obra e poucos construtores: constrói
+      if (openSites > 0 && builders() < Math.min(openSites * 2, Math.ceil(this.villagers.length / 4)) && v.job !== 'build') best = 'build';
+      else if (v.job === 'build' && openSites === 0) best = this.neediestResource();
+      else if (v.job !== 'build') {
+        const cand = this.neediestResource(v);
+        if (stuck ? cand !== v.job : score(cand) + AUTO_JOB_MARGIN < score(v.job as Resource)) best = cand;
+      }
+      if (best !== v.job) { v.job = best; this.resetTask(v); }
+    }
+  }
+
+  /** Faltando moradia, os aldeões constroem uma casa perto da prefeitura com o estoque da vila. */
+  private autoHouse(): void {
+    if (this.villagers.length < this.popCap - 1) return;
+    if (this.buildings.some((b) => b.kind === 'house' && !b.done)) return; // uma de cada vez
+    const cost = BUILDINGS.house.cost;
+    if (RESOURCES.some((r) => this.stock[r] < (cost[r] ?? 0) + (r === 'wood' ? AUTO_HOUSE_RESERVE : 0))) return;
+    const hall = this.townHall();
+    const cx = hall.x + hall.w / 2, cy = hall.y + hall.h / 2;
+    let best: { x: number; y: number } | null = null;
+    let bd = Infinity;
+    const { w, h } = BUILDINGS.house;
+    for (let y = 1; y < GRID_H - 1; y++) {
+      for (let x = 1; x < GRID_W - 1; x++) {
+        const d = (x + w / 2 - cx) ** 2 + (y + h / 2 - cy) ** 2;
+        if (d >= bd || d > AUTO_BUILD_MAX_DIST ** 2 || d < 9) continue;
+        if (!this.spotOk('house', x, y) || !this.roomAround(x, y, w, h)) continue;
+        if (this.irrigated[this.idx(x, y)] === 1) continue; // terra irrigada fica para fazendas
+        best = { x, y }; bd = d;
+      }
+    }
+    if (!best) return;
+    const r = this.requestBuild('house', best.x, best.y);
+    if (r.ok) this.events.push('🏠 Os aldeões decidiram construir uma casa: faltava moradia.');
+  }
+
+  /** Sem outro prédio colado: deixa um corredor livre para andar. */
+  private roomAround(x: number, y: number, w: number, h: number): boolean {
+    for (let j = y - 1; j <= y + h; j++) {
+      for (let i = x - 1; i <= x + w; i++) {
+        if (i < 0 || j < 0 || i >= GRID_W || j >= GRID_H) continue;
+        if (this.blocked[this.idx(i, j)]) return false;
+      }
+    }
+    return true;
   }
 
   // ---------- colocação ----------

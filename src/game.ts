@@ -3,6 +3,7 @@ import { TwitchChat } from './chat/twitch';
 import { Renderer } from './render/renderer';
 import type { GameView } from './render/view';
 import { TICKS_PER_SECOND } from './sim/config';
+import { parseSeed, randomSeed } from './sim/seed';
 import { World } from './sim/world';
 import { Panel } from './ui/panel';
 import { initCloudPanel } from './ui/cloudpanel';
@@ -10,7 +11,15 @@ import { initOverlayPanel } from './ui/overlaypanel';
 import { clearSave, loadGame, saveGame, writeSave } from './ui/save';
 
 const loaded = loadGame();
-const world = loaded ?? new World(Math.floor(Math.random() * 1e9)); // seed só para o mapa novo
+// Seed do mapa novo: ?seed=... na URL, a escolhida em "Nova vila" ou sorteada. Vila salva ignora (usa a própria).
+const SEED_KEY = 'vila-do-chat:proxima-seed';
+const takeNextSeed = (): number | null => {
+  const fromUrl = new URLSearchParams(location.search).get('seed');
+  let stored: string | null = null;
+  try { stored = localStorage.getItem(SEED_KEY); localStorage.removeItem(SEED_KEY); } catch { /* sem armazenamento */ }
+  return parseSeed(fromUrl ?? stored ?? '');
+};
+const world = loaded ?? new World(takeNextSeed() ?? randomSeed());
 const chat = new CommandProcessor(world, { now: () => performance.now() });
 let canvas = document.getElementById('game') as HTMLCanvasElement;
 // Visual: 3D low poly por padrão; ?2d (ou o botão do painel) usa o isométrico 2D.
@@ -54,7 +63,9 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) doSav
 window.addEventListener('beforeunload', doSave);
 panel.onSave = () => { const ok = doSave(); panel.addLog(ok ? '💾 Vila salva neste navegador.' : '⚠ Não foi possível salvar (armazenamento bloqueado ou cheio).', 'ev'); };
 panel.onNew = () => {
-  if (!window.confirm('Apagar a vila salva e começar uma nova?')) return;
+  const typed = window.prompt('Começar uma nova vila apaga a vila salva neste navegador.\n\nSeed do mapa (número ou texto; deixe vazio para sortear). Cancelar mantém a vila atual:', '');
+  if (typed === null) return;
+  try { const sd = parseSeed(typed); if (sd !== null) localStorage.setItem(SEED_KEY, String(sd)); } catch { /* sem armazenamento: o mapa será sorteado */ }
   saveEnabled = false; // senão o autosave de saída recriaria a vila antiga
   clearSave();
   location.reload();

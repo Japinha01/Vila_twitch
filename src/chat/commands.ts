@@ -14,6 +14,7 @@ export type Command =
   | { name: 'trabalhar'; job: Job }
   | { name: 'status' }
   | { name: 'vila' }
+  | { name: 'livre' }
   | { name: 'apoiar' };
 
 type ParseResult = { ok: true; cmd: Command } | { ok: false; error?: string };
@@ -24,7 +25,7 @@ const RES_ALIAS: Record<string, Job> = {
 
 /** Cooldown por viewer e por comando, em ms de relógio real. */
 export const COOLDOWN_MS: Record<Command['name'], number> = {
-  entrar: 5000, trabalhar: 5000, status: 5000, vila: 10000, apoiar: 60000,
+  entrar: 5000, trabalhar: 5000, livre: 5000, status: 5000, vila: 10000, apoiar: 60000,
 };
 
 /** Etapa 1 do pipeline: validação (sintaxe e argumentos). */
@@ -38,6 +39,7 @@ export function parseCommand(text: string): ParseResult {
     case 'status': return { ok: true, cmd: { name: 'status' } };
     case 'vila': return { ok: true, cmd: { name: 'vila' } };
     case 'apoiar': return { ok: true, cmd: { name: 'apoiar' } };
+    case 'livre': case 'autonomo': return { ok: true, cmd: { name: 'livre' } };
     case 'trabalhar': {
       const job = RES_ALIAS[arg];
       return job ? { ok: true, cmd: { name: 'trabalhar', job } } : { ok: false, error: 'use !trabalhar madeira, pedra, comida, água ou construir' };
@@ -114,6 +116,10 @@ export class CommandProcessor {
       case 'trabalhar':
         w.setJob(msg.userId, cmd.job);
         reply(`agora você é ${labelJob(cmd.job)}.`);
+        break;
+      case 'livre':
+        w.setFree(msg.userId);
+        reply('você voltou a decidir sozinho: vai para onde a vila mais precisa.');
         break;
       case 'status':
         reply(`${labelJob(v.job)} · carregando ${v.carry} · XP ${v.xp}.${w.isStuck(v) ? ' Sem trabalho disponível agora (estoque cheio ou sem recurso): troque de função com !trabalhar.' : ''}`);
