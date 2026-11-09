@@ -728,11 +728,32 @@ export class World {
     return !slots || this.workersAt(b) < slots;
   }
 
-  /** Profissão inicial: o recurso mais escasso, descontando quem já trabalha nele. */
+  /** Quão urgente é coletar `r`: cresce com a falta, comida e água pesam o dobro, estoque cheio não pede nada. */
+  private urgency(r: Resource): number {
+    const frac = this.stock[r] / this.storageCap;
+    if (frac >= 1) return 0;
+    return (1 - frac) ** 2 * (r === 'food' || r === 'water' ? 2 : 1) + 0.02;
+  }
+
+  /** Quantos coletores a mais cada recurso pede (positivo = faltam braços), sem contar `except`. */
+  private deficits(except?: Villager): Record<Resource, number> {
+    const gatherers = this.villagers.filter((v) => v.job !== 'build').length;
+    const urg = {} as Record<Resource, number>;
+    let total = 0;
+    for (const r of RESOURCES) { urg[r] = this.urgency(r); total += urg[r]; }
+    const out = {} as Record<Resource, number>;
+    for (const r of RESOURCES) {
+      const have = this.villagers.filter((v) => v !== except && v.job === r).length;
+      out[r] = (total > 0 ? (urg[r] / total) * gatherers : 0) - have;
+    }
+    return out;
+  }
+
+  /** Profissão para quem precisa de uma: o recurso com mais falta de braços. */
   private neediestResource(except?: Villager): Resource {
-    const score = (r: Resource): number => this.stock[r] + 12 * this.villagers.filter((v) => v !== except && v.job === r).length;
+    const d = this.deficits(except);
     let best: Resource = 'wood';
-    for (const r of RESOURCES) if (score(r) < score(best)) best = r;
+    for (const r of RESOURCES) if (d[r] > d[best] + 1e-9) best = r;
     return best;
   }
 
@@ -834,53 +855,87 @@ export class World {
   private autonomyStep(): void {
     for (let i = 0; i < N; i++) if (this.wadeTraffic[i] > 0) this.wadeTraffic[i] *= 0.92; // o trânsito antigo vai sendo esquecido
     this.autoJobs();
-    this.autoHouse();
+    this.autoPlan();
     if ((this.tick / AUTONOMY_EVERY) % 3 === 0) this.autoBridge(); // procura mais raramente: é um cálculo maior
   }
 
   private autoJobs(): void {
     const builders = (): number => this.villagers.filter((v) => v.job === 'build').length;
-    const openSites = this.buildings.filter((b) => !b.done).length;
-    const score = (r: Resource): number => this.stock[r] + 12 * this.villagers.filter((v) => v.job === r).length;
+    const open = this.buildings.filter((b) => !b.done);
+    const critical = open.filter((b) => b.kind === 'farm' || b.kind === 'well').length;
+    const stable = this.stock.food / this.storageCap > 0.15 && this.stock.water / this.storageCap > 0.15;
+    // com fome ou sede só se constrói o que resolve isso; o resto espera a vila se firmar
+    let wantBuilders = Math.min((critical + (stable ? open.length - critical : 0)) * 2, Math.ceil(this.villagers.length / 4));
+    if (critical > 0) wantBuilders = Math.max(wantBuilders, 1);
     for (const v of this.villagers) {
       if (v.ordered) continue;
       if ((this.tick / AUTONOMY_EVERY + v.id) % 3 !== 0) continue; // cada aldeão reavalia a cada ~30 s, em turnos
       const stuck = this.isStuck(v);
       let best: Job = v.job;
-      // há obra e poucos construtores: constrói
-      if (openSites > 0 && builders() < Math.min(openSites * 2, Math.ceil(this.villagers.length / 4)) && v.job !== 'build') best = 'build';
-      else if (v.job === 'build' && openSites === 0) best = this.neediestResource();
+      if (v.job !== 'build' && builders() < wantBuilders) best = 'build';
+      else if (v.job === 'build' && (open.length === 0 || builders() > wantBuilders)) best = this.neediestResource();
       else if (v.job !== 'build') {
+        const d = this.deficits(v);
         const cand = this.neediestResource(v);
-        if (stuck ? cand !== v.job : score(cand) + AUTO_JOB_MARGIN < score(v.job as Resource)) best = cand;
+        if (stuck ? cand !== v.job : d[cand] - d[v.job as Resource] > AUTO_JOB_MARGIN) best = cand;
       }
       if (best !== v.job) { v.job = best; this.resetTask(v); }
     }
   }
 
-  /** Faltando moradia, os aldeões constroem uma casa perto da prefeitura com o estoque da vila. */
-  private autoHouse(): void {
-    if (this.villagers.length < this.popCap - 1) return;
-    if (this.buildings.some((b) => b.kind === 'house' && !b.done)) return; // uma de cada vez
-    const cost = BUILDINGS.house.cost;
-    if (RESOURCES.some((r) => this.stock[r] < (cost[r] ?? 0) + (r === 'wood' ? AUTO_HOUSE_RESERVE : 0))) return;
+  private countKind(kind: BuildingKind): number { return this.buildings.filter((b) => b.kind === kind).length; }
+
+  /** Terreno bom para `kind` perto da prefeitura: ponto válido, com corredor livre e sem tomar terra de fazenda. */
+  private findSite(kind: PlaceableKind): { x: number; y: number } | null {
     const hall = this.townHall();
     const cx = hall.x + hall.w / 2, cy = hall.y + hall.h / 2;
+    const { w, h } = BUILDINGS[kind];
+    const maxD = kind === 'farm' || kind === 'well' ? 22 : AUTO_BUILD_MAX_DIST;
+    const rocks = kind === 'quarry' ? this.nodes.filter((n) => n.kind === 'rock' && this.nodeHarvestable(n)) : [];
     let best: { x: number; y: number } | null = null;
-    let bd = Infinity;
-    const { w, h } = BUILDINGS.house;
+    let bs = Infinity;
     for (let y = 1; y < GRID_H - 1; y++) {
       for (let x = 1; x < GRID_W - 1; x++) {
         const d = (x + w / 2 - cx) ** 2 + (y + h / 2 - cy) ** 2;
-        if (d >= bd || d > AUTO_BUILD_MAX_DIST ** 2 || d < 9) continue;
-        if (!this.spotOk('house', x, y) || !this.roomAround(x, y, w, h)) continue;
-        if (this.irrigated[this.idx(x, y)] === 1) continue; // terra irrigada fica para fazendas
-        best = { x, y }; bd = d;
+        if (d > maxD ** 2 || d < 9) continue;
+        let score = d;
+        if (rocks.length) score = Math.min(...rocks.map((n) => (n.x - x) ** 2 + (n.y - y) ** 2)) * 4 + d * 0.1;
+        if (score >= bs) continue;
+        if (!this.spotOk(kind, x, y) || !this.roomAround(x, y, w, h)) continue;
+        if (kind !== 'farm' && kind !== 'well' && this.irrigated[this.idx(x, y)] === 1) continue; // terra irrigada fica para fazendas
+        best = { x, y }; bs = score;
       }
     }
-    if (!best) return;
-    const r = this.requestBuild('house', best.x, best.y);
-    if (r.ok) this.events.push('🏠 Os aldeões decidiram construir uma casa: faltava moradia.');
+    return best;
+  }
+
+  /**
+   * Os aldeões decidem o que a vila precisa e constroem com o estoque: comida e água primeiro,
+   * depois moradia, armazém e produção. Uma necessidade por vez, e só se a vila se sustenta.
+   */
+  private autoPlan(): void {
+    if (this.buildings.filter((b) => !b.done && b.kind !== 'bridge').length >= 2) return;
+    const pop = this.villagers.length;
+    const cap = this.storageCap;
+    const fr = (r: Resource): number => this.stock[r] / cap;
+    const farms = this.countKind('farm'), wells = this.countKind('well'), houses = this.countKind('house');
+    type Need = { kind: PlaceableKind; why: string; art: string; name: string };
+    const needs: Need[] = [];
+    if (farms < Math.ceil(pop / 5) && (farms === 0 || fr('food') < 0.6)) needs.push({ kind: 'farm', art: 'uma', name: 'fazenda', why: 'faltava comida' });
+    if (wells < Math.ceil(pop / 6) && (wells === 0 || fr('water') < 0.6)) needs.push({ kind: 'well', art: 'um', name: 'poço', why: 'faltava água' });
+    if (pop >= this.popCap - 1 && fr('food') > 0.25 && fr('water') > 0.25) needs.push({ kind: 'house', art: 'uma', name: 'casa', why: 'faltava moradia' });
+    if (RESOURCES.some((r) => fr(r) >= 0.9) && this.countKind('warehouse') < Math.ceil(houses / 3)) needs.push({ kind: 'warehouse', art: 'um', name: 'armazém', why: 'o estoque estava cheio' });
+    if (pop >= 8 && this.stock.wood < 30 && this.countKind('sawmill') === 0) needs.push({ kind: 'sawmill', art: 'uma', name: 'serraria', why: 'faltava madeira' });
+    if (this.stock.stone < 20 && this.countKind('quarry') === 0) needs.push({ kind: 'quarry', art: 'uma', name: 'pedreira', why: 'faltava pedra' });
+    for (const n of needs) {
+      const site = this.findSite(n.kind);
+      if (!site) continue;
+      const cost = BUILDINGS[n.kind].cost;
+      const afford = RESOURCES.every((r) => this.stock[r] >= (cost[r] ?? 0) + (r === 'wood' ? AUTO_HOUSE_RESERVE : 0));
+      if (!afford) { if (n.kind === 'farm' || n.kind === 'well') return; continue; } // juntam material antes de seguir
+      if (this.requestBuild(n.kind, site.x, site.y).ok) this.events.push(`🛠 Os aldeões decidiram construir ${n.art} ${n.name}: ${n.why}.`);
+      return;
+    }
   }
 
   /** Sem outro prédio colado: deixa um corredor livre para andar. */

@@ -41,7 +41,7 @@ export const STARVING_SLOWDOWN = 0.5;
 
 // ---- autonomia dos aldeões ----
 export const AUTONOMY_EVERY = 100; // ticks entre decisões (10 s no x1)
-export const AUTO_JOB_MARGIN = 15; // só troca de profissão se a nova for bem mais necessária
+export const AUTO_JOB_MARGIN = 1; // só troca de profissão se a nova pedir pelo menos 1 aldeão a mais que a atual
 export const AUTO_HOUSE_RESERVE = 10; // madeira que sobra depois de uma casa feita sozinhos
 export const AUTO_BRIDGE_MIN_STRANDED = 3; // recursos do outro lado do rio para valer uma ponte
 export const AUTO_BRIDGE_WADE_MIN = 25; // passos de aldeões com água até o joelho num trecho do rio que valem uma ponte
