@@ -10,6 +10,8 @@ export interface GameView {
   ghost: Ghost | null;
   hoverTile: { x: number; y: number } | null;
   selectedId: number | null;
+  /** só o visual 3D: a câmera acompanha este aldeão (um movimento manual da câmera solta) */
+  followId?: number | null;
   /** tile sob o ponteiro (coordenadas CSS do canvas) */
   pickTile(cssX: number, cssY: number): { x: number; y: number } | null;
   panBy(dxCss: number, dyCss: number): void;

@@ -36,6 +36,8 @@ export class Panel {
     this.initSpeed();
     this.initPalette();
     this.initChat();
+    $('unfollow').addEventListener('click', () => this.selectVillager(null));
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && (e.target as HTMLElement).tagName !== 'INPUT') this.selectVillager(null); });
     const seedEl = $('seedinfo');
     seedEl.textContent = `🗺 Seed do mapa: ${world.seed} (clique para copiar)`;
     seedEl.addEventListener('click', () => {
@@ -154,9 +156,24 @@ export class Panel {
     } else this.view.ghost = null;
   }
 
+  /** Seleciona o aldeão e a câmera passa a acompanhá-lo (no 3D); no 2D só centraliza. */
+  private selectVillager(id: number | null): void {
+    this.selected = id;
+    this.view.selectedId = id;
+    const v = id === null ? undefined : this.world.villagers.find((q) => q.id === id);
+    if (v && 'followId' in this.view) this.view.followId = id;
+    else if (v) this.view.centerOn(v.x, v.y);
+    else this.view.followId = null;
+    $('unfollow').hidden = !(v && 'followId' in this.view);
+  }
+
   private click(t: { x: number; y: number } | null): void {
     if (!t) return;
     const w = this.world;
+    if (this.tool.type === 'none') { // clicar perto de um aldeão seleciona e segue
+      const near = w.villagers.filter((v) => Math.hypot(v.x - (t.x + 0.5), v.y - (t.y + 0.5)) < 1.1).sort((a, b) => Math.hypot(a.x - t.x - 0.5, a.y - t.y - 0.5) - Math.hypot(b.x - t.x - 0.5, b.y - t.y - 0.5))[0];
+      if (near) { this.selectVillager(near.id); return; }
+    }
     if (this.tool.type === 'build') {
       const kind = this.tool.kind;
       const label = BUILDINGS[kind].label;
@@ -218,6 +235,7 @@ export class Panel {
   // ---------- atualização por frame ----------
   update(): void {
     const w = this.world;
+    if (this.selected !== null && 'followId' in this.view && this.view.followId === null) $('unfollow').hidden = true; // a câmera foi solta mexendo nela
     for (const e of w.drainEvents()) this.addLog(/^[🔥🌧🌊✅⚠]/u.test(e) ? e : `🏗 ${e}`, 'ev');
     const se = w.season;
     const days = Math.max(1, Math.ceil(se.daysLeft));
@@ -271,11 +289,7 @@ export class Panel {
         e.stopPropagation();
         if (w.removeVillager(v.userId)) this.addLog(`${v.name} foi removido da vila.`, 'ev');
       });
-      row.addEventListener('click', () => {
-        this.selected = v.id;
-        this.view.selectedId = v.id;
-        this.view.centerOn(v.x, v.y);
-      });
+      row.addEventListener('click', () => this.selectVillager(v.id));
       row.append(name, job, rm);
       list.appendChild(row);
     }

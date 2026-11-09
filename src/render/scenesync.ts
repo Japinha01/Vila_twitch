@@ -95,6 +95,12 @@ export class SceneSync {
     }
   }
 
+  /** Posição suavizada de um aldeão pelo id (para a câmera seguir sem tremer). */
+  positionOf(id: number): { x: number; y: number } | null {
+    const p = this.pos.get(id);
+    return p ? { x: p.x, y: p.y } : null;
+  }
+
   /** Posição mostrada do aldeão (suavizada). */
   private at(v: Villager): { x: number; y: number } {
     return this.pos.get(v.id) ?? v;
