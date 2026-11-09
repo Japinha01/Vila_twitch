@@ -4,8 +4,8 @@ import type { World } from '../sim/world';
 import { getSupabase } from './client';
 import { makeLight, packKeyframe, unpackKeyframe, type LightExtras, type LightFrame } from './frames';
 
-const LIGHT_MS = 333; // ~3 quadros leves por segundo
-const WATER_EVERY = 3; // a água vai a cada 3 quadros leves (~1 por segundo)
+const LIGHT_MS = 166; // ~6 quadros leves por segundo (o visual interpola entre eles)
+const WATER_EVERY = 6; // água e prédios vão a cada 6 quadros leves (~1 por segundo)
 const KEYFRAME_MS = 5000;
 
 /** Token do link do overlay: 192 bits aleatórios. Quem tem o link vê a vila; não há listagem pública. */
