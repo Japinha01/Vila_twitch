@@ -32,3 +32,11 @@ h2 small { font-weight: 400; opacity: .6; }
 #palette button.off { opacity: .45; }
 #hint { font-size: 11px; opacity: .7; line-height: 1.35; }
 #game { cursor: crosshair; touch-action: none; }
+
+#tip { position: fixed; z-index: 10; pointer-events: none; max-width: 280px; padding: 6px 9px; border-radius: 8px; background: rgba(20,28,33,.94); color: #e9ecef; font-size: 12px; line-height: 1.45; box-shadow: 0 4px 14px rgba(0,0,0,.4); white-space: pre-line; }
+#peoplelist { max-height: 170px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.person { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 5px; cursor: pointer; }
+.person:hover { background: #3a4a52; } .person.sel { background: #4a5d66; }
+.person b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person span { opacity: .75; }
+.person button { padding: 0 6px; font-size: 11px; background: transparent; opacity: .55; } .person button:hover { opacity: 1; background: #7a2e0e; }

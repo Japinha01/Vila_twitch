@@ -131,6 +131,14 @@ export class World {
     return { ok: true, villager: v };
   }
 
+  /** Remove um aldeão (streamer ou moderador). Ele pode voltar com !entrar. */
+  removeVillager(userId: string): boolean {
+    const i = this.villagers.findIndex((v) => v.userId === userId);
+    if (i < 0) return false;
+    this.villagers.splice(i, 1);
+    return true;
+  }
+
   setJob(userId: string, job: Job): boolean {
     const v = this.findVillager(userId);
     if (!v) return false;
@@ -551,7 +559,7 @@ export class World {
     return n.kind === 'rock' ? n.amount > 0 : n.amount >= MIN_HARVEST;
   }
 
-  private buildingWorks(b: Building): boolean {
+  buildingWorks(b: Building): boolean {
     if (b.flooded) return false;
     if (b.kind === 'farm') return this.irrigated[this.idx(b.x, b.y)] === 1;
     if (b.kind === 'well') return this.waterNear(b.x + b.w / 2, b.y + b.h / 2, WELL_RANGE);
@@ -566,14 +574,18 @@ export class World {
     return false;
   }
 
-  private slotsFree(b: Building): boolean {
-    const slots = BUILDINGS[b.kind as PlaceableKind]?.slots;
-    if (!slots) return true;
+  /** Quantos aldeões estão indo ou trabalhando neste prédio. */
+  workersAt(b: Building): number {
     let used = 0;
     for (const v of this.villagers) {
       if (v.targetId === b.id && (v.state === 'toTarget' || v.state === 'working')) used++;
     }
-    return used < slots;
+    return used;
+  }
+
+  private slotsFree(b: Building): boolean {
+    const slots = BUILDINGS[b.kind as PlaceableKind]?.slots;
+    return !slots || this.workersAt(b) < slots;
   }
 
   /** Profissão inicial: o recurso mais escasso, descontando quem já trabalha nele. */
