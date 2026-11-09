@@ -6,7 +6,7 @@ import {
 import { MIN_HARVEST, NODE_MAX } from '../sim/config';
 import type { Building, Resource, Villager } from '../sim/types';
 import type { World } from '../sim/world';
-import { COLORS, makeBuilding, makeBush, makeRock, makeTree, mat } from './models';
+import { COLORS, hallStage, makeBuilding, makeBush, makeRock, makeTree, mat } from './models';
 import { HS } from './terrain';
 
 const MAX_VILLAGERS = 600;
@@ -229,8 +229,11 @@ export class SceneSync {
       if (b.kind === 'dam' && b.done) continue;
       seen.add(b.id);
       let g = this.buildings.get(b.id);
+      const stage = b.kind === 'townhall' ? hallStage(w.era) : '';
+      if (g && g.userData.stage !== stage) { this.scene.remove(g); this.buildings.delete(b.id); g = undefined; } // a fogueira vira prefeitura
       if (!g) {
-        g = makeBuilding(b.kind);
+        g = makeBuilding(b.kind, w.era);
+        g.userData.stage = stage;
         shade(g);
         this.scene.add(g);
         this.buildings.set(b.id, g);

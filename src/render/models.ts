@@ -104,6 +104,27 @@ function townhall(): Group {
   return g;
 }
 
+/** Fogueira do acampamento: anel de pedras, lenha, chamas e duas barracas de peles. */
+function campfire(): Group {
+  const g = new Group();
+  g.add(cyl(mat(COLORS.stoneDark), 0.55, 0.6, 0.12, 8, 0, 0, 0));
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    g.add(cyl(mat(COLORS.stone), 0.1, 0.12, 0.16, 5, Math.cos(a) * 0.5, 0, Math.sin(a) * 0.5));
+  }
+  g.add(box(mat(COLORS.woodDark), 0.7, 0.1, 0.12, 0, 0.12, 0));
+  g.add(box(mat(COLORS.wood), 0.12, 0.1, 0.7, 0, 0.2, 0));
+  const flame = cone(mat('#ff922b'), 0.22, 0.55, 5, 0, 0.2, 0, 0.3);
+  const core = cone(mat('#ffd43b'), 0.12, 0.4, 5, 0, 0.2, 0);
+  g.add(flame, core);
+  for (const [x, z, r] of [[-0.95, 0.5, 0.4], [0.9, -0.6, 2.4]] as const) {
+    const tent = cone(mat('#c9a66b'), 0.5, 0.8, 4, x, 0, z, r);
+    g.add(tent);
+    g.add(box(mat(COLORS.door), 0.18, 0.3, 0.05, x + Math.sin(r) * 0.2, 0, z + Math.cos(r) * 0.2));
+  }
+  return g;
+}
+
 function farm(): Group {
   const g = new Group();
   g.add(box(mat(COLORS.soil), 1.9, 0.1, 1.9, 0, 0, 0));
@@ -177,4 +198,6 @@ function market(): Group {
 }
 
 const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well, sawmill, quarry, warehouse, dam, bridge, market };
-export const makeBuilding = (kind: BuildingKind): Group => MAKERS[kind]();
+/** Na Era da Pedra e do Bronze o centro é uma fogueira; a prefeitura vem na Era Medieval. */
+export const hallStage = (era: number): 'fogueira' | 'prefeitura' => (era < 2 ? 'fogueira' : 'prefeitura');
+export const makeBuilding = (kind: BuildingKind, era = 0): Group => (kind === 'townhall' && hallStage(era) === 'fogueira' ? campfire() : MAKERS[kind]());

@@ -19,7 +19,7 @@ export function describeTile(w: World, x: number, y: number): string[] {
 
   const b = w.buildingAt(x, y);
   if (b) {
-    const label = b.kind === 'townhall' ? 'Prefeitura' : BUILDINGS[b.kind as PlaceableKind].label;
+    const label = b.kind === 'townhall' ? (w.era < 2 ? 'Fogueira' : 'Prefeitura') : BUILDINGS[b.kind as PlaceableKind].label;
     if (!b.done) {
       out.push(`🏗 ${label}: em obras ${Math.round((b.progress / b.workNeeded) * 100)}%${b.priority ? ' ★ prioridade' : ''}`);
     } else {

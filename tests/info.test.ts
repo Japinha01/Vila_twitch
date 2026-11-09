@@ -7,6 +7,8 @@ describe('dicas do mapa', () => {
   it('descreve a prefeitura, o solo e a água', () => {
     const w = new World(1);
     const h = w.townHall();
+    expect(describeTile(w, h.x, h.y).join('\n')).toContain('Fogueira'); // na Era da Pedra o centro é uma fogueira
+    w.era = 2;
     expect(describeTile(w, h.x, h.y).join('\n')).toContain('Prefeitura');
     let wet: [number, number] | null = null;
     for (let y = 0; y < GRID_H && !wet; y++) for (let x = 0; x < GRID_W && !wet; x++) if (w.water[w.idx(x, y)] > 0.3) wet = [x, y];
