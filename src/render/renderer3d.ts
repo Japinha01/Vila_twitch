@@ -1,10 +1,11 @@
 import {
   AmbientLight, BufferAttribute, BufferGeometry, Color, DirectionalLight, DoubleSide, HemisphereLight, LessDepth,
   Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry,
-  Raycaster, Scene, Vector2, Vector3, WebGLRenderer,
+  Group, Raycaster, Scene, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { BUILDINGS, GRID_H, GRID_W } from '../sim/config';
 import type { World } from '../sim/world';
+import { makeBuilding } from './models';
 import { SceneSync } from './scenesync';
 import { buildTerrain, fillWater, HS, paintTops, waterIndices } from './terrain';
 import type { GameView, Ghost } from './view';
@@ -33,6 +34,8 @@ export class Renderer3D implements GameView {
 
   private overlays: Mesh[] = []; // quadras de destaque (prévia de obra e mouse)
   private sync: SceneSync;
+  private ghostModel: Group | null = null;
+  private ghostKey = '';
 
   // câmera orbital
   private yaw = Math.PI / 4;
@@ -194,7 +197,7 @@ export class Renderer3D implements GameView {
       col.needsUpdate = true;
     }
     const now = performance.now() / 1000;
-    this.sync.update(now);
+    this.sync.update(now, this.camera, this.selectedId);
     const q = fillWater(w, this.waterPos, now);
     this.water.geometry.setDrawRange(0, q * 6);
     (this.water.geometry.getAttribute('position') as BufferAttribute).needsUpdate = true;
@@ -222,8 +225,34 @@ export class Renderer3D implements GameView {
         if (x < 0 || y < 0 || x >= GRID_W || y >= GRID_H) continue;
         place(this.overlays[n++], x, y, this.ghost.ok ? '#51cf66' : '#ff6b6b', 0.55);
       }
+      this.showGhostModel(this.ghost);
     } else if (this.hoverTile) {
+      this.hideGhostModel();
       place(this.overlays[0], this.hoverTile.x, this.hoverTile.y, '#ffffff', 0.35);
+    } else this.hideGhostModel();
+  }
+
+  /** Prévia translúcida do prédio (verde = pode, vermelho = não pode). */
+  private showGhostModel(gh: Ghost): void {
+    const key = `${gh.kind}:${gh.ok}`;
+    if (this.ghostKey !== key) {
+      this.hideGhostModel(true);
+      const m = makeBuilding(gh.kind);
+      const mat = new MeshBasicMaterial({ color: gh.ok ? '#69db7c' : '#ff8787', transparent: true, opacity: 0.55, depthWrite: false });
+      m.traverse((o) => { if ((o as Mesh).isMesh) (o as Mesh).material = mat; });
+      this.scene.add(m);
+      this.ghostModel = m;
+      this.ghostKey = key;
     }
+    const spec = BUILDINGS[gh.kind];
+    const w = this.world;
+    const cx = Math.min(GRID_W - 1, Math.max(0, gh.x)), cy = Math.min(GRID_H - 1, Math.max(0, gh.y));
+    this.ghostModel!.position.set(gh.x + spec.w / 2, w.height[w.idx(cx, cy)] * HS, gh.y + spec.h / 2);
+    this.ghostModel!.visible = true;
+  }
+
+  private hideGhostModel(drop = false): void {
+    if (!this.ghostModel) return;
+    if (drop) { this.scene.remove(this.ghostModel); this.ghostModel = null; this.ghostKey = ''; } else this.ghostModel.visible = false;
   }
 }
