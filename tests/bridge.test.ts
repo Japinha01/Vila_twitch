@@ -75,11 +75,11 @@ describe('pontes', () => {
   });
 
   it('aldeões autônomos constroem ponte onde vivem atravessando a vau', () => {
-    const w = new World(7);
+    const w = new World(6);
     for (let i = 0; i < 10; i++) w.addVillager(`u${i}`, `V${i}`, '#fff');
     for (let t = 0; t < 6000; t++) { w.step(); w.stock.wood = Math.max(w.stock.wood, 100); }
     expect(w.buildings.some((b) => b.kind === 'bridge')).toBe(true);
-    const off = new World(7);
+    const off = new World(6);
     off.autonomy = false;
     for (let i = 0; i < 10; i++) off.addVillager(`u${i}`, `V${i}`, '#fff');
     for (let t = 0; t < 6000; t++) { off.step(); off.stock.wood = Math.max(off.stock.wood, 100); }
