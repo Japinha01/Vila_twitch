@@ -1,5 +1,6 @@
 import { CommandProcessor } from './chat/commands';
 import { Renderer } from './render/renderer';
+import type { GameView } from './render/view';
 import { TICKS_PER_SECOND } from './sim/config';
 import { World } from './sim/world';
 import { Panel } from './ui/panel';
@@ -8,7 +9,16 @@ import { clearSave, loadGame, saveGame } from './ui/save';
 const loaded = loadGame();
 const world = loaded ?? new World(Math.floor(Math.random() * 1e9)); // seed só para o mapa novo
 const chat = new CommandProcessor(world, { now: () => performance.now() });
-const renderer = new Renderer(document.getElementById('game') as HTMLCanvasElement, world);
+const canvas = document.getElementById('game') as HTMLCanvasElement;
+// ?3d liga o visual 3D low poly (em construção); o padrão continua o isométrico 2D
+const want3d = new URLSearchParams(location.search).has('3d');
+let renderer: GameView;
+if (want3d) {
+  const { Renderer3D } = await import('./render/renderer3d');
+  renderer = new Renderer3D(canvas, world);
+} else {
+  renderer = new Renderer(canvas, world);
+}
 const panel = new Panel(world, chat, renderer);
 
 // ---- salvar: automático a cada 30 s, ao sair da aba e pelo botão ----

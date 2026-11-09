@@ -244,4 +244,6 @@ npm run build    # gera a pasta dist/
 
 **Publicar:** suba o repositório no GitHub, importe na Vercel (preset *Vite*; build `npm run build`, saída `dist`) e cada push na `main` publica sozinho.
 
+**Visual 3D (em construção):** abra com `?3d` na URL (por exemplo `http://localhost:5173/?3d`) para ver o visual low poly em 3D. Q e E (ou botão do meio do mouse) giram a câmera. O padrão continua o isométrico 2D até o 3D ficar completo.
+
 **Estrutura:** `src/sim` (lógica pura e determinística: relevo, água, aldeões, prédios), `src/chat` (comandos: validação → cooldown → fila → efeito), `src/render` (Canvas isométrico, vetor flat), `src/ui` (painel do streamer e chat simulado).

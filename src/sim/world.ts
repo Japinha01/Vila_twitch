@@ -61,6 +61,8 @@ for (let dy = -IRRIGATION_RADIUS; dy <= IRRIGATION_RADIUS; dy++) {
  */
 export class World {
   tick = 0;
+  /** sobe sempre que o relevo muda (represa construída ou demolida); o visual 3D refaz o terreno */
+  terrainVersion = 0;
   stock: Stock = { ...START_STOCK };
   villagers: Villager[] = [];
   buildings: Building[] = [];
@@ -275,6 +277,7 @@ export class World {
         this.height[t] -= DAM_RAISE;
         this.dam[t] = 0;
       }
+      this.terrainVersion++;
     }
     for (const v of this.villagers) if (v.targetId === id) this.resetTask(v);
     this.events.push(`${spec.label} demolida.`);
@@ -617,6 +620,7 @@ export class World {
         this.dam[t] = 1;
         this.water[t] = 0;
       }
+      this.terrainVersion++;
     }
     this.events.push(`${BUILDINGS[b.kind as PlaceableKind].label} concluída!`);
     for (const o of this.villagers) {
