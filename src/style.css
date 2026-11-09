@@ -85,4 +85,4 @@ html.clear, html.clear body { background: transparent; }
 #eraline { font-size: 13px; color: #ffd43b; }
 
 h2.sub { margin: 10px 0 6px; font-size: 13px; }
-#paint button.on { background: #f08c00; color: #fff; }
+#paint button.on, #terrain button.on { background: #f08c00; color: #fff; }

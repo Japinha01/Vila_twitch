@@ -49,6 +49,17 @@ export const AUTO_BRIDGE_WADE_MIN = 25; // passos de aldeões com água até o j
 export const AUTO_BRIDGE_MAX_SPAN = 6; // largura máxima do rio que eles se arriscam a atravessar
 export const AUTO_BUILD_MAX_DIST = 24; // alcance da procura de terreno ao redor da prefeitura
 
+// ---- terreno ----
+export const MAX_HEIGHT = 9;
+export const DIG_COST: Partial<Record<Resource, number>> = { wood: 1 }; // por tile, por nível
+export const RAISE_COST: Partial<Record<Resource, number>> = { stone: 1 };
+export const SPRING_COST: Partial<Record<Resource, number>> = { stone: 8, wood: 4 };
+export const SPRING_RATE = 0.03; // água por passo de uma nascente criada (sustenta um lago pequeno)
+export const MAX_SPRINGS = 16;
+export const AUTO_CANAL_MAX_LEN = 26; // maior canal que os aldeões cavam de uma vez
+export const AUTO_CANAL_MAX_DEPTH = 2; // níveis que eles se dispõem a cavar num tile
+export const AUTO_CANAL_MAX = 4; // canais por vila
+
 // ---- estradas, zonas e comércio ----
 export const ROAD_COST: Partial<Record<Resource, number>> = { wood: 2, stone: 1 }; // por tile, na hora
 export const ROAD_STEP_COST = 0.55; // andar em estrada custa menos na rota
