@@ -43,6 +43,10 @@ export interface Villager {
   carryRes: Resource | null;
   workLeft: number;
   xp: number;
+  /** rota atual (tiles a percorrer); null = ainda não calculada */
+  path: number[] | null;
+  pi: number; // próximo ponto da rota
+  wait: number; // ticks de espera antes de tentar de novo
 }
 
 export const RESOURCES: Resource[] = ['wood', 'stone', 'food', 'water'];
