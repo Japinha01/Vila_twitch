@@ -6,6 +6,7 @@ import {
   SUPPORT_BONUS, SUPPORT_MAX_TICKS, SUPPORT_TICKS, TEMPERATE_DAYS, TICKS_PER_DAY, WAREHOUSE_STORAGE,
   WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH, MAX_STEP, MAX_WADE, RETRY_TICKS, WADE_SLOW_DEPTH, FLOOD_DEPTH, DEMOLISH_REFUND, DROUGHT_WARNING_DAYS,
 } from './config';
+import { ERAS, goalsMet, type EraSnapshot } from './eras';
 import { findPath } from './path';
 import { hashString, mulberry32, type Rng } from './rng';
 import {
@@ -34,6 +35,7 @@ export interface SaveData {
   prevDrought: boolean;
   warned?: boolean;
   autonomy?: boolean;
+  era?: number;
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
   buildings: Building[];
   nodes: ResourceNode[];
@@ -101,6 +103,7 @@ export class World {
   private delta = new Float32Array(N);
   private flows = new Float32Array(4);
   private events: string[] = [];
+  era = 0; // índice em ERAS
   private prevDrought = false;
   private warned = false; // já avisou a seca que vem aí?
   private rx: number[] = []; // x esquerdo do leito por linha
@@ -115,7 +118,7 @@ export class World {
   serialize(): SaveData {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
-      supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy,
+      supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -147,6 +150,7 @@ export class World {
    */
   applySave(data: SaveData): void {
     this.tick = data.tick;
+    this.era = Math.min(Math.max(0, data.era ?? 0), ERAS.length - 1);
     this.stock = { ...data.stock };
     this.supportUntil = data.supportUntil;
     this.nextId = data.nextId;
@@ -366,8 +370,25 @@ export class World {
   }
 
   // ---------- simulação ----------
+  /** Foto do que vale para as metas das eras. */
+  eraSnapshot(): EraSnapshot {
+    const done: Partial<Record<BuildingKind, number>> = {};
+    for (const b of this.buildings) if (b.done && !b.flooded) done[b.kind] = (done[b.kind] ?? 0) + 1;
+    return { pop: this.villagers.length, done };
+  }
+
+  /** As eras são automáticas: cumpridas as metas, a vila sobe sozinha (pode pular se já cumpriu as seguintes). */
+  private checkEra(): void {
+    const snap = this.eraSnapshot();
+    while (this.era < ERAS.length - 1 && goalsMet(this.era + 1, snap)) {
+      this.era++;
+      this.events.push(`🏛 ${ERAS[this.era].icon} A vila entrou na ${ERAS[this.era].name}! ${ERAS[this.era].tagline}`);
+    }
+  }
+
   step(): void {
     this.tick++;
+    if (this.tick % 50 === 0) this.checkEra();
     if (this.autonomy && this.tick % AUTONOMY_EVERY === 0) this.autonomyStep();
     for (const v of this.villagers) {
       if (v.state !== 'toTarget' && v.state !== 'toStore') continue;

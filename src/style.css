@@ -67,3 +67,19 @@ html.clear, html.clear body { background: transparent; }
 
 #seedinfo { font-size: 12px; color: #868e96; cursor: pointer; }
 #seedinfo:hover { color: #ced4da; }
+
+/* celebração de nova era */
+#erabanner { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 20; }
+#erabanner[hidden] { display: none; }
+#erabanner .erabox { position: absolute; left: 50%; top: 22%; transform: translate(-50%, -50%) scale(.6); opacity: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 22px 44px; border-radius: 24px; background: rgba(20,26,30,.82); border: 3px solid #ffd43b; color: #fff; text-align: center; text-shadow: 0 2px 6px #000; box-shadow: 0 0 60px rgba(255,212,59,.55); max-width: 80%; }
+#erabanner.show .erabox { animation: eraPop 6s ease-out forwards; }
+#erabanner .eraicon { font-size: 64px; line-height: 1; }
+#erabanner small { letter-spacing: 4px; color: #ffd43b; font-size: 14px; }
+#erabanner b { font-size: 40px; }
+#erabanner span { font-size: 16px; opacity: .9; }
+#erabanner .confetti i { position: absolute; top: -20px; border-radius: 2px; opacity: 0; }
+#erabanner.show .confetti i { animation-name: eraFall; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes eraPop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.6); } 8% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } 14% { transform: translate(-50%, -50%) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1); } }
+@keyframes eraFall { 0% { opacity: 1; transform: translateY(0) rotate(0); } 100% { opacity: 1; transform: translateY(110vh) rotate(720deg); } }
+#hud .hudera { font-size: 17px; color: #ffd43b; }
+#eraline { font-size: 13px; color: #ffd43b; }

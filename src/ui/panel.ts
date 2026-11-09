@@ -236,7 +236,7 @@ export class Panel {
   update(): void {
     const w = this.world;
     if (this.selected !== null && 'followId' in this.view && this.view.followId === null) $('unfollow').hidden = true; // a câmera foi solta mexendo nela
-    for (const e of w.drainEvents()) this.addLog(/^[🔥🌧🌊✅⚠]/u.test(e) ? e : `🏗 ${e}`, 'ev');
+    for (const e of w.drainEvents()) this.addLog(/^[🔥🌧🌊✅⚠🏛]/u.test(e) ? e : `🏗 ${e}`, 'ev');
     const se = w.season;
     const days = Math.max(1, Math.ceil(se.daysLeft));
     const seasonEl = $('season');

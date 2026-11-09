@@ -19,6 +19,7 @@ export interface LightExtras { c?: CameraArr; o?: OverlayOptions }
 export interface LightFrame {
   t: number; // tick
   su: number; // até quando o apoio ✨ vale
+  e?: number; // era da vila
   c?: CameraArr; // câmera do streamer
   o?: [number, number]; // opções do overlay: nomes, status
   s: Stock;
@@ -61,6 +62,7 @@ export function makeLight(world: World, withWater: boolean, extras: LightExtras 
   const f: LightFrame = {
     t: world.tick,
     su: world.supportUntil,
+    e: world.era,
     s: { ...world.stock },
     v: world.villagers.map((v) => [v.id, round2(v.x), round2(v.y), STATES.indexOf(v.state), v.carryRes ? RESOURCES.indexOf(v.carryRes) : -1]),
   };
@@ -104,6 +106,7 @@ export class OverlayMirror {
     w.tick = f.t;
     w.stock = { ...f.s };
     w.supportUntil = f.su;
+    if (f.e !== undefined) w.era = f.e;
     if (f.c) this.camera = f.c;
     if (f.o) this.options = { names: !!f.o[0], hud: !!f.o[1] };
     const known = new Map(w.villagers.map((v) => [v.id, v]));
