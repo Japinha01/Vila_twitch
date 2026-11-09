@@ -1,6 +1,6 @@
 import {
   AmbientLight, BufferAttribute, BufferGeometry, Color, DirectionalLight, DoubleSide, HemisphereLight, LessDepth,
-  Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry,
+  Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, PCFSoftShadowMap, PerspectiveCamera, PlaneGeometry,
   Group, Raycaster, Scene, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { BUILDINGS, GRID_H, GRID_W } from '../sim/config';
@@ -32,6 +32,9 @@ export class Renderer3D implements GameView {
   private waterPos!: Float32Array;
   private paintFrame = 0;
 
+  private sun = new DirectionalLight('#fff0d0', 1.25);
+  private hemi = new HemisphereLight('#d6ecff', '#6b5a43', 0.75);
+  private mood = 0; // 0 = temperada, 1 = seca (suavizado)
   private overlays: Mesh[] = []; // quadras de destaque (prévia de obra e mouse)
   private sync: SceneSync;
   private ghostModel: Group | null = null;
@@ -51,11 +54,21 @@ export class Renderer3D implements GameView {
     this.scene.background = new Color('#26323a');
 
     // luz: céu azulado, sol quente de lado (as sombras entram no acabamento)
-    this.scene.add(new HemisphereLight('#d6ecff', '#6b5a43', 0.75));
+    this.scene.add(this.hemi);
     this.scene.add(new AmbientLight('#ffffff', 0.15));
-    const sun = new DirectionalLight('#fff0d0', 1.25);
+    const sun = this.sun;
     sun.position.set(-18, 30, 12);
-    this.scene.add(sun);
+    sun.target.position.set(GRID_W / 2, 0, GRID_H / 2);
+    sun.position.add(sun.target.position);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    const sc = sun.shadow.camera;
+    sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 120;
+    sun.shadow.bias = -0.0006;
+    sun.shadow.normalBias = 0.04;
+    this.scene.add(sun, sun.target);
+    this.gl.shadowMap.enabled = true;
+    this.gl.shadowMap.type = PCFSoftShadowMap;
 
     this.buildWater();
     this.rebuildTerrain();
@@ -85,6 +98,8 @@ export class Renderer3D implements GameView {
     paintTops(this.world, t.colors);
     this.terrainGeo = g;
     this.terrain = new Mesh(g, new MeshLambertMaterial({ vertexColors: true }));
+    this.terrain.receiveShadow = true;
+    this.terrain.castShadow = true;
     this.scene.add(this.terrain);
     this.terrainVersion = this.world.terrainVersion;
   }
@@ -202,9 +217,23 @@ export class Renderer3D implements GameView {
     this.water.geometry.setDrawRange(0, q * 6);
     (this.water.geometry.getAttribute('position') as BufferAttribute).needsUpdate = true;
 
+    this.updateMood();
     this.updateOverlays();
     this.gl.render(this.scene, this.camera);
   }
+
+  /** Céu e luz mudam com a estação: azulado e fresco na temperada, quente e pálido na seca. */
+  private updateMood(): void {
+    const target = this.world.season.drought ? 1 : 0;
+    this.mood += (target - this.mood) * 0.02;
+    const m = this.mood;
+    (this.scene.background as Color).set('#26323a').lerp(this.tmpDry.set('#4a3a2c'), m);
+    this.sun.color.set('#fff0d0').lerp(this.tmpDry.set('#ffc880'), m);
+    this.sun.intensity = 1.25 - 0.1 * m;
+    this.hemi.color.set('#d6ecff').lerp(this.tmpDry.set('#ffe9c4'), m);
+    this.hemi.intensity = 0.75 - 0.1 * m;
+  }
+  private tmpDry = new Color();
 
   private updateOverlays(): void {
     const w = this.world;

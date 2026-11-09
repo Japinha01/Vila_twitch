@@ -244,6 +244,6 @@ npm run build    # gera a pasta dist/
 
 **Publicar:** suba o repositório no GitHub, importe na Vercel (preset *Vite*; build `npm run build`, saída `dist`) e cada push na `main` publica sozinho.
 
-**Visual:** o padrão é 3D low poly (Three.js). O botão 🧊/🗺 no painel alterna para o isométrico 2D (ou use `?2d` na URL); se o WebGL falhar, o jogo cai sozinho para o 2D. Q e E (ou botão do meio do mouse) giram a câmera no 3D.
+**Visual:** o padrão é 3D low poly (Three.js). Sombras e luz que muda com a seca. O botão 🧊/🗺 no painel alterna para o isométrico 2D (ou use `?2d` na URL); se o WebGL falhar, o jogo cai sozinho para o 2D. Q e E (ou botão do meio do mouse) giram a câmera no 3D.
 
 **Estrutura:** `src/sim` (lógica pura e determinística: relevo, água, aldeões, prédios), `src/chat` (comandos: validação → cooldown → fila → efeito), `src/render` (Canvas isométrico, vetor flat), `src/ui` (painel do streamer e chat simulado).

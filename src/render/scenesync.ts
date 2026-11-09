@@ -12,6 +12,9 @@ import { HS } from './terrain';
 const MAX_VILLAGERS = 600;
 const LOAD_COLOR: Record<Resource, string> = { wood: '#a9743d', stone: '#868e96', food: '#e03131', water: '#339af0' };
 
+/** Faz o grupo projetar sombra. */
+const shade = (g: Group): void => g.traverse((o) => { if ((o as Mesh).isMesh) (o as Mesh).castShadow = true; });
+
 /** Variação estável por id (rotação, tamanho) sem usar aleatório. */
 const hash01 = (id: number): number => ((Math.imul(id, 2654435761) >>> 0) % 1000) / 1000;
 
@@ -42,8 +45,10 @@ export class SceneSync {
     for (const m of [this.bodies, this.heads, this.loads]) {
       m.count = 0;
       m.frustumCulled = false;
+      m.castShadow = true;
       scene.add(m);
     }
+    this.heads.castShadow = this.loads.castShadow = false;
     this.ring = new Mesh(new RingGeometry(0.28, 0.36, 24).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: '#ffd43b', side: DoubleSide, depthTest: false, transparent: true }));
     this.ring.renderOrder = 6;
     this.ring.visible = false;
@@ -95,6 +100,7 @@ export class SceneSync {
       if (!g) {
         g = n.kind === 'tree' ? makeTree() : n.kind === 'bush' ? makeBush() : makeRock();
         g.rotation.y = hash01(n.id) * Math.PI * 2;
+        shade(g);
         this.scene.add(g);
         this.nodes.set(n.id, g);
       }
@@ -127,6 +133,7 @@ export class SceneSync {
       let g = this.buildings.get(b.id);
       if (!g) {
         g = makeBuilding(b.kind);
+        shade(g);
         this.scene.add(g);
         this.buildings.set(b.id, g);
       }
