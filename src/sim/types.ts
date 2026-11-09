@@ -48,6 +48,8 @@ export interface Villager {
   path: number[] | null;
   pi: number; // próximo ponto da rota
   wait: number; // ticks de espera antes de tentar de novo
+  /** true = o viewer escolheu a profissão com !trabalhar; false/ausente = o aldeão decide sozinho */
+  ordered?: boolean;
 }
 
 export const RESOURCES: Resource[] = ['wood', 'stone', 'food', 'water'];

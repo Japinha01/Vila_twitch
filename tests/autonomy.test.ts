@@ -1,0 +1,77 @@
+import { describe, expect, it } from 'vitest';
+import { CommandProcessor } from '../src/chat/commands';
+import { AUTONOMY_EVERY } from '../src/sim/config';
+import { World } from '../src/sim/world';
+
+const run = (w: World, ticks: number): void => { for (let i = 0; i < ticks; i++) w.step(); };
+
+describe('autonomia dos aldeões', () => {
+  it('sem moradia sobrando, os aldeões constroem uma casa sozinhos (gastando o estoque)', () => {
+    const w = new World(5);
+    for (let i = 0; i < w.popCap; i++) w.addVillager(`u${i}`, `V${i}`, '#fff');
+    w.stock.wood = 200; w.stock.stone = 50;
+    const before = w.buildings.length;
+    run(w, AUTONOMY_EVERY + 1);
+    const house = w.buildings.find((b) => b.kind === 'house');
+    expect(w.buildings.length).toBe(before + 1);
+    expect(house && !house.done).toBe(true);
+    expect(w.stock.wood).toBeLessThan(200);
+    expect(w.drainEvents().some((e) => e.includes('decidiram construir uma casa'))).toBe(true);
+  });
+
+  it('não constrói se faltar estoque, se houver moradia ou se a autonomia estiver desligada', () => {
+    const poor = new World(5);
+    for (let i = 0; i < poor.popCap; i++) poor.addVillager(`u${i}`, `V${i}`, '#fff');
+    poor.stock.wood = 10;
+    run(poor, AUTONOMY_EVERY + 1);
+    expect(poor.buildings.some((b) => b.kind === 'house')).toBe(false);
+
+    const roomy = new World(5);
+    roomy.addVillager('a', 'A', '#fff');
+    roomy.stock.wood = 500;
+    run(roomy, AUTONOMY_EVERY * 3);
+    expect(roomy.buildings.some((b) => b.kind === 'house')).toBe(false);
+
+    const off = new World(5);
+    off.autonomy = false;
+    for (let i = 0; i < off.popCap; i++) off.addVillager(`u${i}`, `V${i}`, '#fff');
+    off.stock.wood = 500;
+    run(off, AUTONOMY_EVERY * 3);
+    expect(off.buildings.some((b) => b.kind === 'house')).toBe(false);
+  });
+
+  it('só uma casa por vez e sempre em terreno válido, longe da irrigação e com corredor livre', () => {
+    const w = new World(9);
+    for (let i = 0; i < w.popCap; i++) w.addVillager(`u${i}`, `V${i}`, '#fff');
+    w.stock.wood = 500; w.stock.stone = 100;
+    run(w, AUTONOMY_EVERY * 4);
+    const houses = w.buildings.filter((b) => b.kind === 'house');
+    expect(houses.length).toBeLessThanOrEqual(1 + (w.buildings.filter((b) => b.kind === 'house' && b.done).length));
+    for (const h of houses) expect(w.irrigated[w.idx(h.x, h.y)]).toBe(0);
+  });
+
+  it('quem escolheu com !trabalhar não muda sozinho; !livre devolve a decisão', () => {
+    const w = new World(5);
+    const chat = new CommandProcessor(w, { now: () => 0 });
+    w.addVillager('1', 'Ana', '#fff');
+    w.stock.stone = 0; w.stock.food = 500; w.stock.water = 500; w.stock.wood = 500;
+    w.setJob('1', 'wood');
+    run(w, AUTONOMY_EVERY * 12);
+    expect(w.findVillager('1')!.job).toBe('wood');
+    chat.submit({ userId: '1', user: 'Ana', text: '!livre' });
+    chat.process();
+    expect(w.findVillager('1')!.ordered).toBe(false);
+    run(w, AUTONOMY_EVERY * 12);
+    expect(w.findVillager('1')!.job).toBe('stone'); // o que mais falta
+  });
+
+  it('o save guarda a autonomia e a ordem do viewer', () => {
+    const w = new World(5);
+    w.autonomy = false;
+    w.addVillager('1', 'Ana', '#fff');
+    w.setJob('1', 'food');
+    const r = World.fromSave(JSON.parse(JSON.stringify(w.serialize())));
+    expect(r.autonomy).toBe(false);
+    expect(r.findVillager('1')!.ordered).toBe(true);
+  });
+});
