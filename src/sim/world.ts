@@ -4,7 +4,7 @@ import {
   GRID_W, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
   SUPPORT_BONUS, SUPPORT_MAX_TICKS, SUPPORT_TICKS, TEMPERATE_DAYS, TICKS_PER_DAY, WAREHOUSE_STORAGE,
-  WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH, MAX_STEP, MAX_WADE, RETRY_TICKS, WADE_SLOW_DEPTH, FLOOD_DEPTH, DEMOLISH_REFUND,
+  WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH, MAX_STEP, MAX_WADE, RETRY_TICKS, WADE_SLOW_DEPTH, FLOOD_DEPTH, DEMOLISH_REFUND, DROUGHT_WARNING_DAYS,
 } from './config';
 import { findPath } from './path';
 import { hashString, mulberry32, type Rng } from './rng';
@@ -31,6 +31,7 @@ export interface SaveData {
   nextId: number;
   rngState: number;
   prevDrought: boolean;
+  warned?: boolean;
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
   buildings: Building[];
   nodes: ResourceNode[];
@@ -89,6 +90,7 @@ export class World {
   private flows = new Float32Array(4);
   private events: string[] = [];
   private prevDrought = false;
+  private warned = false; // já avisou a seca que vem aí?
   private rx: number[] = []; // x esquerdo do leito por linha
   private readonly rng: Rng;
 
@@ -101,7 +103,7 @@ export class World {
   serialize(): SaveData {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
-      supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought,
+      supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned,
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -128,6 +130,7 @@ export class World {
     w.supportUntil = data.supportUntil;
     w.nextId = data.nextId;
     w.prevDrought = data.prevDrought;
+    w.warned = data.warned ?? false;
     w.rng.setState(data.rngState);
     w.villagers = data.villagers.map((v) => ({ ...v, workLeft: v.workLeft ?? Infinity }));
     w.buildings = data.buildings.map((b) => ({ ...b }));
@@ -164,6 +167,8 @@ export class World {
   /** Prédios prontos e não alagados. */
   working(kind: BuildingKind): number { return this.buildings.filter((b) => b.kind === kind && b.done && !b.flooded).length; }
   findVillager(userId: string): Villager | undefined { return this.villagers.find((v) => v.userId === userId); }
+  /** Aldeão parado porque não há recurso ou obra alcançável para a profissão dele. */
+  isStuck(v: Villager): boolean { return v.state === 'idle' && v.wait > 0; }
   isWet(i: number): boolean { return this.water[i] >= WET_DEPTH; }
 
   drainEvents(): string[] {
@@ -315,6 +320,12 @@ export class World {
   step(): void {
     this.tick++;
     const drought = this.season.drought;
+    const se = this.season;
+    if (!drought && !this.warned && se.daysLeft <= DROUGHT_WARNING_DAYS) {
+      this.warned = true;
+      this.events.push('⚠ A seca chega em 1 dia! Encham o estoque de água e comida, ou façam uma represa.');
+    }
+    if (drought) this.warned = false;
     if (drought !== this.prevDrought) {
       this.prevDrought = drought;
       this.events.push(drought ? '🔥 A seca começou! O rio secou: guardem água e protejam as plantações.' : '🌧 A seca acabou. A água voltou ao rio.');
@@ -542,6 +553,8 @@ export class World {
   private candidates(job: Job): { id: number; x: number; y: number; reach: number }[] {
     const c: { id: number; x: number; y: number; reach: number }[] = [];
     const bReach = (b: Building): number => Math.max(b.w, b.h) / 2 + 0.7;
+    // estoque cheio: não gasta recurso finito à toa (o streamer vê "sem trabalho" e constrói armazém)
+    if (job !== 'build' && this.stock[job] >= this.storageCap) return c;
     if (job === 'build') {
       const sites = this.buildings.filter((b) => !b.done);
       const pri = sites.filter((b) => b.priority);
@@ -552,8 +565,8 @@ export class World {
       const kind: NodeKind = job === 'wood' ? 'tree' : job === 'stone' ? 'rock' : 'bush';
       for (const n of this.nodes) if (n.kind === kind && this.nodeHarvestable(n)) c.push({ id: n.id, x: n.x + 0.5, y: n.y + 0.5, reach: REACH });
     }
-    if (job === 'food' || job === 'water') {
-      const kind: BuildingKind = job === 'food' ? 'farm' : 'well';
+    if (job === 'food' || job === 'water' || job === 'stone') {
+      const kind: BuildingKind = job === 'food' ? 'farm' : job === 'water' ? 'well' : 'quarry';
       for (const b of this.buildings) {
         if (b.kind === kind && b.done && this.buildingWorks(b) && this.slotsFree(b)) c.push({ id: b.id, x: b.x + b.w / 2, y: b.y + b.h / 2, reach: bReach(b) });
       }
@@ -629,6 +642,7 @@ export class World {
 
   buildingWorks(b: Building): boolean {
     if (b.flooded) return false;
+    if (b.kind === 'quarry') return true; // pedra natural acaba; a pedreira é a fonte sustentável
     if (b.kind === 'farm') return this.irrigated[this.idx(b.x, b.y)] === 1;
     if (b.kind === 'well') return this.waterNear(b.x + b.w / 2, b.y + b.h / 2, WELL_RANGE);
     return false;

@@ -221,8 +221,9 @@ O **streamer joga como no Timberborn**: constrói e melhora a vila clicando no m
 
 **Mundo:**
 - Terreno com relevo (degraus) e um **rio** que nasce no norte e corre até o sul. A água escorre pelo relevo de verdade.
-- **Irrigação:** só a terra perto da água fica verde. Árvores e arbustos só rebrotam em solo irrigado; **fazenda** só pode ser construída (e só rende) em solo irrigado; **poço** só rende com água por perto. Fazenda tem 3 vagas de trabalhadores e poço tem 2.
-- **Seca:** a cada 4 dias de estação temperada vêm 2 dias de seca. O rio seca, a terra amarela e as plantações param. Guarde água e comida antes.
+- **Irrigação:** só a terra perto da água fica verde. Árvores e arbustos só rebrotam em solo irrigado; **fazenda** só pode ser construída (e só rende) em solo irrigado; **poço** só rende com água por perto. Fazenda tem 3 vagas de trabalhadores, poço tem 2 e pedreira tem 3.
+- **Pedra:** as pedras do mapa acabam; a **pedreira** é a fonte sustentável de pedra (e não depende de água).
+- **Seca:** o jogo avisa 1 dia antes. A cada 4 dias de estação temperada vêm 2 dias de seca. O rio seca, a terra amarela e as plantações param. Guarde água e comida antes.
 - **Represa:** construída sobre o rio, sobe o terreno e segura a água a montante, formando um reservatório que irriga uma área maior e aguenta mais a seca.
 - **Alagamento:** prédio com água alta sobre ele (por exemplo, perto de um reservatório) para de funcionar até secar; casa alagada não conta para a população e armazém alagado não conta para o estoque.
 - **Salvar:** a vila é salva sozinha neste navegador (a cada 30 s e ao sair da aba) e carregada ao abrir. Botões 💾 Salvar e Nova vila no painel.

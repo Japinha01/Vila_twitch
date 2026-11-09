@@ -23,6 +23,7 @@ export const MOISTURE_RATE = 0.01; // por passo de água
 export const WELL_RANGE = 3.5; // poço só rende com água a esta distância
 export const DAM_RAISE = 2; // quanto a represa sobe o terreno
 export const FLOOD_DEPTH = 0.3; // água a partir daqui alaga o prédio e ele para de funcionar
+export const DROUGHT_WARNING_DAYS = 1; // avisa a seca com esta antecedência
 export const DEMOLISH_REFUND = 0.5; // fração do custo devolvida ao demolir um prédio pronto
 
 // ---- aldeões ----
@@ -70,7 +71,7 @@ export const BUILDINGS: Record<Exclude<BuildingKind, 'townhall'>, BuildingSpec> 
   farm: { label: 'Fazenda', w: 2, h: 2, cost: { wood: 20 }, work: 100, slots: 3 },
   well: { label: 'Poço', w: 2, h: 2, cost: { wood: 5, stone: 15 }, work: 80, slots: 2 },
   sawmill: { label: 'Serraria', w: 2, h: 2, cost: { wood: 30, stone: 10 }, work: 150 },
-  quarry: { label: 'Pedreira', w: 2, h: 2, cost: { wood: 40, stone: 5 }, work: 150 },
+  quarry: { label: 'Pedreira', w: 2, h: 2, cost: { wood: 40, stone: 5 }, work: 150, slots: 3 },
   warehouse: { label: 'Armazém', w: 2, h: 2, cost: { wood: 40, stone: 20 }, work: 180 },
   dam: { label: 'Represa', w: 2, h: 1, cost: { wood: 30, stone: 20 }, work: 150 },
 };
