@@ -51,6 +51,18 @@
           </div>
           <div id="cloudhint">Entrando, a vila e o XP dos viewers ficam guardados na sua conta e voltam em qualquer navegador.</div>
         </section>
+        <section class="card" id="overlay" hidden>
+          <h2>Overlay para o OBS <small id="ovstatus">desligado</small></h2>
+          <div class="row"><button id="ovtoggle">Ativar overlay</button></div>
+          <div id="ovlink" hidden>
+            <div class="row">
+              <input id="ovurl" readonly aria-label="Link do overlay" />
+              <button id="ovcopy">Copiar</button>
+            </div>
+            <div class="row"><button id="ovrenew">Gerar novo link</button></div>
+            <div id="ovhint">No OBS: Fontes &gt; + &gt; Navegador, cole o link, largura 1920 e altura 1080. O fundo é transparente. Guarde o link em segredo: quem o tem vê a sua vila. Mantenha esta aba do jogo aberta durante a live.</div>
+          </div>
+        </section>
         <section class="card" id="twitch">
           <h2>Chat da Twitch <small id="twstatus">desconectado</small></h2>
           <div class="row">

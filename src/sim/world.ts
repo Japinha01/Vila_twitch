@@ -128,25 +128,35 @@ export class World {
     if (!data.buildings.length || data.buildings[0].kind !== 'townhall') throw new Error('save inválido: sem prefeitura');
 
     const w = new World(data.seed); // refaz o terreno base (rio e nascentes) a partir da seed
-    w.tick = data.tick;
-    w.stock = { ...data.stock };
-    w.supportUntil = data.supportUntil;
-    w.nextId = data.nextId;
-    w.prevDrought = data.prevDrought;
-    w.warned = data.warned ?? false;
-    w.rng.setState(data.rngState);
-    w.villagers = data.villagers.map((v) => ({ ...v, workLeft: v.workLeft ?? Infinity }));
-    w.buildings = data.buildings.map((b) => ({ ...b }));
-    w.nodes = data.nodes.map((n) => ({ ...n }));
-    w.height.set(data.height); w.water.set(data.water); w.moisture.set(data.moisture);
-    w.dam.set(data.dam); w.irrigated.set(data.irrigated);
-    w.occ.fill(0); w.blocked.fill(0);
-    for (const n of w.nodes) w.occ[w.idx(n.x, n.y)] = 1;
-    for (const b of w.buildings) { w.markRect(b.x, b.y, b.w, b.h, 1); w.markRect(b.x, b.y, b.w, b.h, 1, w.blocked); }
-    w.wet.length = 0;
-    for (let i = 0; i < N; i++) if (w.water[i] >= WET_DEPTH) w.wet.push(i);
-    w.events = [];
+    w.applySave(data);
     return w;
+  }
+
+  /**
+   * Copia um save já validado para este mundo, no lugar (usado por fromSave e pelo overlay do OBS,
+   * que espelha a vila de outro navegador sem rodar a simulação).
+   */
+  applySave(data: SaveData): void {
+    this.tick = data.tick;
+    this.stock = { ...data.stock };
+    this.supportUntil = data.supportUntil;
+    this.nextId = data.nextId;
+    this.prevDrought = data.prevDrought;
+    this.warned = data.warned ?? false;
+    this.rng.setState(data.rngState);
+    this.villagers = data.villagers.map((v) => ({ ...v, workLeft: v.workLeft ?? Infinity }));
+    this.buildings = data.buildings.map((b) => ({ ...b }));
+    this.nodes = data.nodes.map((n) => ({ ...n }));
+    const reliefChanged = data.height.some((h, i) => h !== this.height[i]);
+    this.height.set(data.height); this.water.set(data.water); this.moisture.set(data.moisture);
+    this.dam.set(data.dam); this.irrigated.set(data.irrigated);
+    this.occ.fill(0); this.blocked.fill(0);
+    for (const n of this.nodes) this.occ[this.idx(n.x, n.y)] = 1;
+    for (const b of this.buildings) { this.markRect(b.x, b.y, b.w, b.h, 1); this.markRect(b.x, b.y, b.w, b.h, 1, this.blocked); }
+    this.wet.length = 0;
+    for (let i = 0; i < N; i++) if (this.water[i] >= WET_DEPTH) this.wet.push(i);
+    this.events = [];
+    if (reliefChanged) this.terrainVersion++; // o visual 3D refaz o terreno só se o relevo mudou
   }
 
   // ---------- consulta ----------
