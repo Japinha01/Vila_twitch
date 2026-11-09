@@ -3,8 +3,9 @@ import type { BuildingKind, Resource, Stock } from './types';
 export const TICKS_PER_SECOND = 10;
 export const TICKS_PER_DAY = 600; // 1 dia = 60 s no x1
 
-export const GRID_W = 48;
-export const GRID_H = 34;
+export const GRID_W = 72;
+export const GRID_H = 52;
+export const MAP_SCALE = (GRID_W * GRID_H) / (48 * 34); // quanto o mapa é maior que o original (conta de recursos, lagos)
 
 // ---- estações ----
 export const TEMPERATE_DAYS = 4;
@@ -46,7 +47,7 @@ export const AUTO_HOUSE_RESERVE = 10; // madeira que sobra depois de uma casa fe
 export const AUTO_BRIDGE_MIN_STRANDED = 3; // recursos do outro lado do rio para valer uma ponte
 export const AUTO_BRIDGE_WADE_MIN = 25; // passos de aldeões com água até o joelho num trecho do rio que valem uma ponte
 export const AUTO_BRIDGE_MAX_SPAN = 6; // largura máxima do rio que eles se arriscam a atravessar
-export const AUTO_BUILD_MAX_DIST = 14; // alcance da procura de terreno ao redor da prefeitura
+export const AUTO_BUILD_MAX_DIST = 24; // alcance da procura de terreno ao redor da prefeitura
 
 export const BASE_POP_CAP = 10;
 export const HOUSE_POP = 4;

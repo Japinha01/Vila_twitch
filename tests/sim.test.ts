@@ -51,6 +51,7 @@ describe('simulação', () => {
 
   it('aldeões coletam recursos e depositam no estoque', () => {
     const w = new World(7);
+    w.autonomy = false; // sem obras gastando a madeira
     w.addVillager('a', 'A', '#fff');
     w.setJob('a', 'wood');
     const before = w.stock.wood;
