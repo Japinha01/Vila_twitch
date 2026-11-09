@@ -40,3 +40,8 @@ h2 small { font-weight: 400; opacity: .6; }
 .person b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person span { opacity: .75; }
 .person button { padding: 0 6px; font-size: 11px; background: transparent; opacity: .55; } .person button:hover { opacity: 1; background: #7a2e0e; }
+
+#twstatus.connected { color: #51cf66; }
+#twstatus.error { color: #ff8787; }
+#twhint { font-size: 12px; color: #868e96; margin-top: 6px; }
+#twchannel { flex: 1; min-width: 0; }

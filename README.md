@@ -179,7 +179,7 @@ A vila contra desastres e ondas de inimigos controladas pelo jogo. É barato de 
 | Marco | Entrega |
 |---|---|
 | M0 | Vila em canvas com chat **simulado** (botões que fingem comandos). Testar o feeling sem estar ao vivo. |
-| M1 | Leitura real do chat da Twitch (`!entrar`, `!trabalhar`, `!construir`). |
+| M1 | ✅ Leitura real do chat da Twitch (`!entrar`, `!trabalhar`, ...), anônima, com tmi.js. |
 | M2 | Persistência de aldeões e vila no Supabase. |
 | M3 | Painel do streamer + overlay para OBS (browser source). |
 | M4 | Modo Endless completo com eventos e ranking. |
@@ -247,3 +247,5 @@ npm run build    # gera a pasta dist/
 **Visual:** o padrão é 3D low poly (Three.js). Sombras e luz que muda com a seca. O botão 🧊/🗺 no painel alterna para o isométrico 2D (ou use `?2d` na URL); se o WebGL falhar, o jogo cai sozinho para o 2D. Q e E (ou botão do meio do mouse) giram a câmera no 3D.
 
 **Estrutura:** `src/sim` (lógica pura e determinística: relevo, água, aldeões, prédios), `src/chat` (comandos: validação → cooldown → fila → efeito), `src/render` (Canvas isométrico, vetor flat), `src/ui` (painel do streamer e chat simulado).
+
+**Chat da Twitch (M1):** no painel, digite o seu canal e clique em Conectar. A leitura é anônima (sem login nem token), então as respostas do jogo aparecem só no painel, não no chat da Twitch. O ID numérico da Twitch identifica cada viewer. O chat simulado continua para testes.
