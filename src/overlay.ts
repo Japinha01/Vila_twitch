@@ -3,6 +3,7 @@ import { RESOURCES } from './sim/types';
 import { isValidToken, OverlayViewer, type ViewerHandlers } from './cloud/overlay';
 import { Renderer } from './render/renderer';
 import type { GameView } from './render/view';
+import { EraBanner, eraLine } from './ui/erabanner';
 
 const ICON = { wood: '🪵', stone: '🪨', food: '🍎', water: '💧' } as const;
 
@@ -30,6 +31,7 @@ export async function runOverlay(
   if (!isValidToken(token)) { say('Link do overlay inválido. Copie de novo no painel do jogo.'); return; }
 
   let mirror: OverlayMirror | null = null;
+  let eraBanner: EraBanner | null = null;
   let view: GameView | null = null;
   let lastFrame = 0;
 
@@ -44,7 +46,7 @@ export async function runOverlay(
     if (hud.hidden) return;
     const w = m.world!, se = w.season;
     const days = Math.max(1, Math.ceil(se.daysLeft));
-    const html = `<div class="hudtop"><b>Dia ${w.day}</b><span class="${se.drought ? 'drought' : ''}">${se.drought ? `🔥 Seca · o rio volta em ${days}d` : `☀ Temperada · seca em ${days}d`}</span></div>`
+    const html = `<div class="hudera">${eraLine(w)}</div><div class="hudtop"><b>Dia ${w.day}</b><span class="${se.drought ? 'drought' : ''}">${se.drought ? `🔥 Seca · o rio volta em ${days}d` : `☀ Temperada · seca em ${days}d`}</span></div>`
       + `<div class="hudres">${RESOURCES.map((r) => `<span>${ICON[r]} ${Math.floor(w.stock[r])}</span>`).join('')}</div>`
       + `<div class="hudpop">👥 ${w.villagers.length}/${w.popCap}${w.supportActive ? ' · ✨ apoio' : ''}${w.starving ? ' · ⚠ fome/sede!' : ''}</div>`;
     if (html !== hudText) { hudText = html; hud.innerHTML = html; }
@@ -108,6 +110,7 @@ export async function runOverlay(
       lastFrame = performance.now();
       if (!mirror) {
         mirror = OverlayMirror.fromKeyframe(save);
+        eraBanner = new EraBanner(mirror.world!, document.getElementById('stage')!);
         void startView(mirror).then(() => { say(''); requestAnimationFrame(frame); });
       } else mirror.applyKeyframe(save);
     },
@@ -138,6 +141,7 @@ export async function runOverlay(
       }
       view.setNames?.(mirror.options.names);
       drawHud(mirror);
+      eraBanner?.update();
       view.draw();
       say(now - lastFrame > 15000 ? 'Sem sinal do jogo do streamer…' : '');
     }

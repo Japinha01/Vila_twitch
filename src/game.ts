@@ -5,6 +5,7 @@ import type { GameView } from './render/view';
 import { TICKS_PER_SECOND } from './sim/config';
 import { parseSeed, randomSeed } from './sim/seed';
 import { World } from './sim/world';
+import { EraBanner, eraLine } from './ui/erabanner';
 import { Panel } from './ui/panel';
 import { initCloudPanel } from './ui/cloudpanel';
 import { initOverlayPanel } from './ui/overlaypanel';
@@ -54,6 +55,8 @@ visualBtn.addEventListener('click', () => {
   location.href = u.toString();
 });
 const panel = new Panel(world, chat, renderer);
+const eraBanner = new EraBanner(world, document.getElementById('stage')!);
+const eraEl = document.getElementById('eraline')!;
 
 // ---- salvar: automático a cada 30 s, ao sair da aba e pelo botão ----
 let saveEnabled = true;
@@ -122,6 +125,9 @@ function frame(now: number): void {
   if (steps >= 60) acc = 0;
   renderer.draw();
   panel.update();
+  eraBanner.update();
+  const el = eraLine(world);
+  if (eraEl.textContent !== el) eraEl.textContent = el;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
