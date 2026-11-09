@@ -1,13 +1,21 @@
+export interface Rng {
+  (): number;
+  /** estado interno, para salvar e continuar a mesma sequência depois */
+  getState(): number;
+  setState(s: number): void;
+}
+
 /** Gerador pseudoaleatório determinístico (mulberry32): mesma seed, mesma sequência. */
-export function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): Rng {
   let a = seed >>> 0;
-  return () => {
+  const next = (): number => {
     a = (a + 0x6d2b79f5) >>> 0;
     let t = a;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+  return Object.assign(next, { getState: () => a, setState: (s: number) => { a = s >>> 0; } });
 }
 
 /** Hash simples de string para número (usado para cores/nomes estáveis por viewer). */

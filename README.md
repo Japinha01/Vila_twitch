@@ -225,6 +225,7 @@ O **streamer joga como no Timberborn**: constrói e melhora a vila clicando no m
 - **Seca:** a cada 4 dias de estação temperada vêm 2 dias de seca. O rio seca, a terra amarela e as plantações param. Guarde água e comida antes.
 - **Represa:** construída sobre o rio, sobe o terreno e segura a água a montante, formando um reservatório que irriga uma área maior e aguenta mais a seca.
 - **Alagamento:** prédio com água alta sobre ele (por exemplo, perto de um reservatório) para de funcionar até secar; casa alagada não conta para a população e armazém alagado não conta para o estoque.
+- **Salvar:** a vila é salva sozinha neste navegador (a cada 30 s e ao sair da aba) e carregada ao abrir. Botões 💾 Salvar e Nova vila no painel.
 - Fome ou sede só deixa o trabalho mais lento; ninguém morre.
 
 ---

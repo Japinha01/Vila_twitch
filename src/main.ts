@@ -3,11 +3,28 @@ import { Renderer } from './render/renderer';
 import { TICKS_PER_SECOND } from './sim/config';
 import { World } from './sim/world';
 import { Panel } from './ui/panel';
+import { clearSave, loadGame, saveGame } from './ui/save';
 
-const world = new World(Math.floor(Math.random() * 1e9)); // seed só para o mapa de hoje
+const loaded = loadGame();
+const world = loaded ?? new World(Math.floor(Math.random() * 1e9)); // seed só para o mapa novo
 const chat = new CommandProcessor(world, { now: () => performance.now() });
 const renderer = new Renderer(document.getElementById('game') as HTMLCanvasElement, world);
 const panel = new Panel(world, chat, renderer);
+
+// ---- salvar: automático a cada 30 s, ao sair da aba e pelo botão ----
+let saveEnabled = true;
+const doSave = (): boolean => saveEnabled && saveGame(world);
+setInterval(doSave, 30000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) doSave(); });
+window.addEventListener('beforeunload', doSave);
+panel.onSave = () => { const ok = doSave(); panel.addLog(ok ? '💾 Vila salva neste navegador.' : '⚠ Não foi possível salvar (armazenamento bloqueado ou cheio).', 'ev'); };
+panel.onNew = () => {
+  if (!window.confirm('Apagar a vila salva e começar uma nova?')) return;
+  saveEnabled = false; // senão o autosave de saída recriaria a vila antiga
+  clearSave();
+  location.reload();
+};
+if (loaded) panel.addLog(`💾 Vila carregada (dia ${world.day}).`, 'ev');
 
 let last = performance.now();
 let acc = 0;

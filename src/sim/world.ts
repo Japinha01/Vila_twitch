@@ -7,7 +7,7 @@ import {
   WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH, MAX_STEP, MAX_WADE, RETRY_TICKS, WADE_SLOW_DEPTH, FLOOD_DEPTH, DEMOLISH_REFUND,
 } from './config';
 import { findPath } from './path';
-import { hashString, mulberry32 } from './rng';
+import { hashString, mulberry32, type Rng } from './rng';
 import {
   RESOURCES, type Building, type BuildingKind, type Job, type NodeKind, type Resource,
   type ResourceNode, type Stock, type Villager,
@@ -18,6 +18,28 @@ export type PlaceCheck = { ok: true } | { ok: false; reason: 'cost' | 'space'; m
 export type BuildResult = { ok: true; building: Building } | Exclude<PlaceCheck, { ok: true }>;
 export type PlaceableKind = Exclude<BuildingKind, 'townhall'>;
 export interface Season { drought: boolean; daysLeft: number }
+
+export const SAVE_VERSION = 1;
+
+/** Estado completo da vila em JSON simples. O terreno base (rio, nascentes) volta da seed. */
+export interface SaveData {
+  version: number;
+  seed: number;
+  tick: number;
+  stock: Stock;
+  supportUntil: number;
+  nextId: number;
+  rngState: number;
+  prevDrought: boolean;
+  villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
+  buildings: Building[];
+  nodes: ResourceNode[];
+  height: number[];
+  water: number[];
+  moisture: number[];
+  dam: number[];
+  irrigated: number[];
+}
 
 const N = GRID_W * GRID_H;
 const MIN_W = 0.003;
@@ -68,11 +90,57 @@ export class World {
   private events: string[] = [];
   private prevDrought = false;
   private rx: number[] = []; // x esquerdo do leito por linha
-  private readonly rng: () => number;
+  private readonly rng: Rng;
 
   constructor(public readonly seed: number) {
     this.rng = mulberry32(seed);
     this.generate();
+  }
+
+  // ---------- salvar e carregar ----------
+  serialize(): SaveData {
+    return {
+      version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
+      supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought,
+      // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
+      villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
+      buildings: this.buildings.map((b) => ({ ...b })),
+      nodes: this.nodes.map((n) => ({ ...n })),
+      height: Array.from(this.height), water: Array.from(this.water), moisture: Array.from(this.moisture),
+      dam: Array.from(this.dam), irrigated: Array.from(this.irrigated),
+    };
+  }
+
+  /** Reconstrói a vila a partir de um save; lança erro se o dado não for válido. */
+  static fromSave(data: SaveData): World {
+    const num = (n: unknown): boolean => typeof n === 'number' && Number.isFinite(n);
+    const okArr = (a: unknown): boolean => Array.isArray(a) && a.length === N && a.every(num);
+    if (!data || data.version !== SAVE_VERSION) throw new Error('versão de save não suportada');
+    if (!num(data.seed) || !num(data.tick) || !num(data.nextId) || !num(data.rngState)) throw new Error('save inválido');
+    if (!data.stock || RESOURCES.some((r) => !num(data.stock[r]))) throw new Error('save inválido: estoque');
+    if (![data.height, data.water, data.moisture, data.dam, data.irrigated].every(okArr)) throw new Error('save inválido: mapa');
+    if (!Array.isArray(data.villagers) || !Array.isArray(data.buildings) || !Array.isArray(data.nodes)) throw new Error('save inválido: listas');
+    if (!data.buildings.length || data.buildings[0].kind !== 'townhall') throw new Error('save inválido: sem prefeitura');
+
+    const w = new World(data.seed); // refaz o terreno base (rio e nascentes) a partir da seed
+    w.tick = data.tick;
+    w.stock = { ...data.stock };
+    w.supportUntil = data.supportUntil;
+    w.nextId = data.nextId;
+    w.prevDrought = data.prevDrought;
+    w.rng.setState(data.rngState);
+    w.villagers = data.villagers.map((v) => ({ ...v, workLeft: v.workLeft ?? Infinity }));
+    w.buildings = data.buildings.map((b) => ({ ...b }));
+    w.nodes = data.nodes.map((n) => ({ ...n }));
+    w.height.set(data.height); w.water.set(data.water); w.moisture.set(data.moisture);
+    w.dam.set(data.dam); w.irrigated.set(data.irrigated);
+    w.occ.fill(0); w.blocked.fill(0);
+    for (const n of w.nodes) w.occ[w.idx(n.x, n.y)] = 1;
+    for (const b of w.buildings) { w.markRect(b.x, b.y, b.w, b.h, 1); w.markRect(b.x, b.y, b.w, b.h, 1, w.blocked); }
+    w.wet.length = 0;
+    for (let i = 0; i < N; i++) if (w.water[i] >= WET_DEPTH) w.wet.push(i);
+    w.events = [];
+    return w;
   }
 
   // ---------- consulta ----------
