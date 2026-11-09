@@ -1,9 +1,10 @@
 import {
-  Color, CylinderGeometry, Group, IcosahedronGeometry, InstancedMesh, BoxGeometry, Mesh, MeshLambertMaterial,
-  Object3D, type Scene,
+  BoxGeometry, CanvasTexture, Color, CylinderGeometry, DoubleSide, Group, IcosahedronGeometry, InstancedMesh, Mesh,
+  MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry, RingGeometry, Sprite, SpriteMaterial,
+  type Camera, type Scene,
 } from 'three';
 import { MIN_HARVEST, NODE_MAX } from '../sim/config';
-import type { Resource, Villager } from '../sim/types';
+import type { Building, Resource, Villager } from '../sim/types';
 import type { World } from '../sim/world';
 import { COLORS, makeBuilding, makeBush, makeRock, makeTree, mat } from './models';
 import { HS } from './terrain';
@@ -24,6 +25,15 @@ export class SceneSync {
   private colors = new Map<number, Color>();
   private dummy = new Object3D();
   private tmp = new Color();
+  private bars = new Map<number, Group>(); // barra de progresso das obras
+  private floods = new Map<number, Mesh>(); // véu azul em prédio alagado
+  private ring: Mesh;
+  private label: Sprite | null = null;
+  private labelFor = -1;
+  private barBg = new MeshBasicMaterial({ color: '#212529', depthTest: false, transparent: true, opacity: 0.8 });
+  private barFill = new MeshBasicMaterial({ color: '#fcc419', depthTest: false });
+  private barBgGeo = new PlaneGeometry(1.2, 0.16);
+  private barFillGeo = new PlaneGeometry(1.1, 0.09).translate(0.55, 0, 0);
 
   constructor(private scene: Scene, private world: World) {
     this.bodies = new InstancedMesh(new CylinderGeometry(0.11, 0.14, 0.34, 6), new MeshLambertMaterial({ flatShading: true }), MAX_VILLAGERS);
@@ -34,12 +44,46 @@ export class SceneSync {
       m.frustumCulled = false;
       scene.add(m);
     }
+    this.ring = new Mesh(new RingGeometry(0.28, 0.36, 24).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: '#ffd43b', side: DoubleSide, depthTest: false, transparent: true }));
+    this.ring.renderOrder = 6;
+    this.ring.visible = false;
+    scene.add(this.ring);
   }
 
-  update(time: number): void {
+  update(time: number, camera: Camera, selectedId: number | null): void {
     this.syncNodes();
-    this.syncBuildings();
+    this.syncBuildings(camera);
     this.syncVillagers(time);
+    this.syncSelection(camera, selectedId);
+  }
+
+  /** Anel e nome sobre o aldeão selecionado. */
+  private syncSelection(camera: Camera, selectedId: number | null): void {
+    const v = selectedId === null ? undefined : this.world.villagers.find((q) => q.id === selectedId);
+    this.ring.visible = !!v;
+    if (!v) { if (this.label) this.label.visible = false; return; }
+    const y = this.world.groundZ(v.x, v.y) * HS;
+    this.ring.position.set(v.x, y + 0.03, v.y);
+    if (this.labelFor !== v.id) {
+      if (this.label) { this.scene.remove(this.label); (this.label.material as SpriteMaterial).map?.dispose(); }
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 64;
+      const g = c.getContext('2d')!;
+      g.font = 'bold 30px sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = 'rgba(20,24,28,0.8)';
+      g.beginPath(); g.roundRect(8, 8, 240, 48, 14); g.fill();
+      g.fillStyle = '#fff';
+      g.fillText(v.name.slice(0, 16), 128, 33);
+      this.label = new Sprite(new SpriteMaterial({ map: new CanvasTexture(c), depthTest: false, transparent: true }));
+      this.label.scale.set(1.6, 0.4, 1);
+      this.label.renderOrder = 7;
+      this.scene.add(this.label);
+      this.labelFor = v.id;
+    }
+    this.label!.visible = true;
+    this.label!.position.set(v.x, y + 0.95, v.y);
+    void camera;
   }
 
   private syncNodes(): void {
@@ -73,7 +117,7 @@ export class SceneSync {
     for (const [id, g] of this.nodes) if (!seen.has(id)) { this.scene.remove(g); this.nodes.delete(id); }
   }
 
-  private syncBuildings(): void {
+  private syncBuildings(camera: Camera): void {
     const w = this.world;
     const seen = new Set<number>();
     for (const b of w.buildings) {
@@ -89,6 +133,8 @@ export class SceneSync {
       g.position.set(b.x + b.w / 2, w.height[w.idx(b.x, b.y)] * HS, b.y + b.h / 2);
       // obra "sobe" conforme o progresso
       g.scale.y = b.done ? 1 : 0.12 + 0.88 * (b.progress / b.workNeeded);
+      this.syncBar(b, g, camera);
+      this.syncFlood(b, g);
       if (b.kind === 'farm') {
         const ok = w.irrigated[w.idx(b.x, b.y)] === 1;
         for (const r of (g.userData.rows as Group).children as Mesh[]) r.material = mat(ok ? COLORS.crop : COLORS.cropDry);
@@ -97,6 +143,42 @@ export class SceneSync {
       }
     }
     for (const [id, g] of this.buildings) if (!seen.has(id)) { this.scene.remove(g); this.buildings.delete(id); }
+    for (const [id, g] of this.bars) if (!seen.has(id)) { this.scene.remove(g); this.bars.delete(id); }
+    for (const [id, m] of this.floods) if (!seen.has(id)) { this.scene.remove(m); this.floods.delete(id); }
+  }
+
+  /** Barra de progresso flutuante, sempre de frente para a câmera. */
+  private syncBar(b: Building, g: Group, camera: Camera): void {
+    let bar = this.bars.get(b.id);
+    if (b.done) { if (bar) bar.visible = false; return; }
+    if (!bar) {
+      bar = new Group();
+      const bg = new Mesh(this.barBgGeo, this.barBg);
+      const fill = new Mesh(this.barFillGeo, this.barFill);
+      fill.position.set(-0.55, 0, 0.001);
+      bg.renderOrder = 8; fill.renderOrder = 9;
+      bar.add(bg, fill);
+      bar.userData.fill = fill;
+      this.scene.add(bar);
+      this.bars.set(b.id, bar);
+    }
+    bar.visible = true;
+    bar.position.set(g.position.x, g.position.y + 1.5, g.position.z);
+    bar.quaternion.copy(camera.quaternion);
+    (bar.userData.fill as Mesh).scale.x = Math.max(0.02, b.progress / b.workNeeded);
+  }
+
+  /** Véu azul translúcido sobre prédio alagado (desativado). */
+  private syncFlood(b: Building, g: Group): void {
+    let m = this.floods.get(b.id);
+    if (!b.flooded) { if (m) m.visible = false; return; }
+    if (!m) {
+      m = new Mesh(new BoxGeometry(b.w, 0.5, b.h), new MeshBasicMaterial({ color: '#339af0', transparent: true, opacity: 0.45, depthWrite: false }));
+      this.scene.add(m);
+      this.floods.set(b.id, m);
+    }
+    m.visible = true;
+    m.position.set(g.position.x, g.position.y + 0.25, g.position.z);
   }
 
   private syncVillagers(time: number): void {

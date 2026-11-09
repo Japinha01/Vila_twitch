@@ -9,16 +9,38 @@ import { clearSave, loadGame, saveGame } from './ui/save';
 const loaded = loadGame();
 const world = loaded ?? new World(Math.floor(Math.random() * 1e9)); // seed só para o mapa novo
 const chat = new CommandProcessor(world, { now: () => performance.now() });
-const canvas = document.getElementById('game') as HTMLCanvasElement;
-// ?3d liga o visual 3D low poly (em construção); o padrão continua o isométrico 2D
-const want3d = new URLSearchParams(location.search).has('3d');
-let renderer: GameView;
-if (want3d) {
-  const { Renderer3D } = await import('./render/renderer3d');
-  renderer = new Renderer3D(canvas, world);
-} else {
-  renderer = new Renderer(canvas, world);
+let canvas = document.getElementById('game') as HTMLCanvasElement;
+// Visual: 3D low poly por padrão; ?2d (ou o botão do painel) usa o isométrico 2D.
+// A escolha fica salva no navegador; se o WebGL falhar, cai sozinho para o 2D.
+const params = new URLSearchParams(location.search);
+const PREF_KEY = 'vila-do-chat:visual';
+const readPref = (): string | null => { try { return localStorage.getItem(PREF_KEY); } catch { return null; } };
+let mode: '2d' | '3d' = params.has('2d') ? '2d' : params.has('3d') ? '3d' : readPref() === '2d' ? '2d' : '3d';
+let r3: GameView | undefined;
+if (mode === '3d') {
+  try {
+    const { Renderer3D } = await import('./render/renderer3d');
+    r3 = new Renderer3D(canvas, world);
+  } catch (err) {
+    console.warn('3D indisponível, usando o visual 2D.', err);
+    mode = '2d';
+    // o canvas pode ter ficado preso a um contexto WebGL falho: troca por um novo
+    const fresh = canvas.cloneNode(false) as HTMLCanvasElement;
+    canvas.replaceWith(fresh);
+    canvas = fresh;
+  }
 }
+const renderer: GameView = r3 ?? new Renderer(canvas, world);
+const visualBtn = document.getElementById('visual') as HTMLButtonElement;
+visualBtn.textContent = mode === '3d' ? '🧊 3D' : '🗺 2D';
+visualBtn.title = 'Alternar entre o visual 3D e o 2D';
+visualBtn.addEventListener('click', () => {
+  try { localStorage.setItem(PREF_KEY, mode === '3d' ? '2d' : '3d'); } catch { /* sem armazenamento: vale só para esta aba */ }
+  saveGame(world); // mantém o progresso ao recarregar
+  const u = new URL(location.href);
+  u.searchParams.delete('2d'); u.searchParams.delete('3d');
+  location.href = u.toString();
+});
 const panel = new Panel(world, chat, renderer);
 
 // ---- salvar: automático a cada 30 s, ao sair da aba e pelo botão ----
