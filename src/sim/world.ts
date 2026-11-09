@@ -4,8 +4,9 @@ import {
   GRID_W, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
   SUPPORT_BONUS, SUPPORT_MAX_TICKS, SUPPORT_TICKS, TEMPERATE_DAYS, TICKS_PER_DAY, WAREHOUSE_STORAGE,
-  WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH,
+  WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH, MAX_STEP, MAX_WADE, RETRY_TICKS, WADE_SLOW_DEPTH,
 } from './config';
+import { findPath } from './path';
 import { hashString, mulberry32 } from './rng';
 import {
   RESOURCES, type Building, type BuildingKind, type Job, type NodeKind, type Resource,
@@ -58,6 +59,7 @@ export class World {
 
   private nextId = 1;
   private occ = new Uint8Array(N); // 1 = tile ocupado por nó/prédio
+  private blocked = new Uint8Array(N); // 1 = tile coberto por prédio (aldeão não atravessa)
   private downstream = new Int32Array(N).fill(-1);
   private sources: number[] = [];
   private wet: number[] = [];
@@ -121,7 +123,7 @@ export class World {
       x: hall.x + hall.w / 2 + Math.cos(a) * 2.3,
       y: hall.y + hall.h / 2 + Math.sin(a) * 2.3,
       job: this.neediestResource(), state: 'idle', targetId: null,
-      carry: 0, carryRes: null, workLeft: 0, xp: 0,
+      carry: 0, carryRes: null, workLeft: 0, xp: 0, path: null, pi: 0, wait: 0,
     };
     this.villagers.push(v);
     return { ok: true, villager: v };
@@ -131,8 +133,7 @@ export class World {
     const v = this.findVillager(userId);
     if (!v) return false;
     v.job = job;
-    v.state = 'idle';
-    v.targetId = null;
+    this.resetTask(v);
     return true;
   }
 
@@ -158,7 +159,9 @@ export class World {
     if (!c.ok) return c;
     const spec = BUILDINGS[kind];
     for (const r of RESOURCES) this.stock[r] -= spec.cost[r] ?? 0;
-    return { ok: true, building: this.placeBuilding(kind, x, y, spec.w, spec.h, spec.work, false) };
+    const b = this.placeBuilding(kind, x, y, spec.w, spec.h, spec.work, false);
+    this.evict(b);
+    return { ok: true, building: b };
   }
 
   /** Cancela uma obra em andamento e devolve os recursos. */
@@ -169,7 +172,8 @@ export class World {
     for (const r of RESOURCES) this.stock[r] = Math.min(this.storageCap, this.stock[r] + (spec.cost[r] ?? 0));
     this.buildings.splice(this.buildings.indexOf(b), 1);
     this.markRect(b.x, b.y, b.w, b.h, 0);
-    for (const v of this.villagers) if (v.targetId === id) { v.state = 'idle'; v.targetId = null; }
+    for (const v of this.villagers) if (v.targetId === id) this.resetTask(v);
+    this.markRect(b.x, b.y, b.w, b.h, 0, this.blocked);
     return true;
   }
 
@@ -182,6 +186,30 @@ export class World {
 
   buildingAt(x: number, y: number): Building | undefined {
     return this.buildings.find((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h);
+  }
+
+  /** Empurra para fora da obra os aldeões que estavam no terreno, para ninguém ficar preso dentro do prédio. */
+  private evict(b: Building): void {
+    for (const v of this.villagers) {
+      const tx = Math.floor(v.x), ty = Math.floor(v.y);
+      if (tx < b.x || tx >= b.x + b.w || ty < b.y || ty >= b.y + b.h) continue;
+      let best = -1, bd = Infinity;
+      for (let y = b.y - 1; y <= b.y + b.h; y++) {
+        for (let x = b.x - 1; x <= b.x + b.w; x++) {
+          if (x < 0 || y < 0 || x >= GRID_W || y >= GRID_H) continue;
+          if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) continue;
+          const t = this.idx(x, y);
+          if (!this.walkable(t)) continue;
+          const d = (x + 0.5 - v.x) ** 2 + (y + 0.5 - v.y) ** 2;
+          if (d < bd) { bd = d; best = t; }
+        }
+      }
+      if (best < 0) continue;
+      v.x = (best % GRID_W) + 0.5;
+      v.y = Math.floor(best / GRID_W) + 0.5;
+      if (v.state === 'toStore') v.path = null;
+      else this.resetTask(v);
+    }
   }
 
   // ---------- simulação ----------
@@ -287,13 +315,80 @@ export class World {
     return f;
   }
 
+  private tileOf(x: number, y: number): number {
+    return Math.min(GRID_H - 1, Math.max(0, Math.floor(y))) * GRID_W + Math.min(GRID_W - 1, Math.max(0, Math.floor(x)));
+  }
+
+  private resetTask(v: Villager): void {
+    v.state = 'idle';
+    v.targetId = null;
+    v.path = null;
+    v.pi = 0;
+  }
+
+  /** O tile pode ser pisado? (prédio, represa e água funda fecham o caminho) */
+  private walkable(t: number): boolean {
+    return !this.blocked[t] && !this.dam[t] && this.water[t] < MAX_WADE;
+  }
+
+  /** Custo de andar entre tiles vizinhos; Infinity = bloqueado (penhasco, prédio, água funda). */
+  private stepCost(from: number, to: number): number {
+    if (!this.walkable(to)) return Infinity;
+    if (Math.abs(this.height[from] - this.height[to]) > MAX_STEP) return Infinity;
+    return this.water[to] >= WADE_SLOW_DEPTH ? 2 : 1;
+  }
+
+  /** Tiles livres cujo centro está a `reach` do ponto (cx, cy). */
+  private tilesNear(cx: number, cy: number, reach: number): number[] {
+    const out: number[] = [];
+    const r = Math.ceil(reach);
+    for (let y = Math.floor(cy) - r; y <= Math.floor(cy) + r; y++) {
+      for (let x = Math.floor(cx) - r; x <= Math.floor(cx) + r; x++) {
+        if (x < 0 || y < 0 || x >= GRID_W || y >= GRID_H) continue;
+        if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= reach * reach && this.walkable(y * GRID_W + x)) out.push(y * GRID_W + x);
+      }
+    }
+    return out;
+  }
+
+  /** Procura a rota mais curta até algum dos alvos; devolve o id do alvo alcançado e define v.path. */
+  private route(v: Villager, cands: { id: number; x: number; y: number; reach: number }[]): number | undefined {
+    const goal = new Map<number, number>();
+    for (const c of cands) for (const t of this.tilesNear(c.x, c.y, c.reach)) if (!goal.has(t)) goal.set(t, c.id);
+    if (!goal.size) return undefined;
+    const path = findPath(this.tileOf(v.x, v.y), (t) => goal.has(t), (a, b) => this.stepCost(a, b));
+    if (!path) return undefined;
+    v.path = path;
+    v.pi = 0;
+    return goal.get(path.length ? path[path.length - 1] : this.tileOf(v.x, v.y));
+  }
+
+  /** Anda um passo ao longo da rota. */
+  private follow(v: Villager): 'arrived' | 'moving' | 'blocked' {
+    const path = v.path!;
+    if (v.pi >= path.length) return 'arrived';
+    const t = path[v.pi];
+    if (!this.walkable(t)) return 'blocked'; // a água subiu ou algo foi construído no caminho
+    const tx = (t % GRID_W) + 0.5, ty = Math.floor(t / GRID_W) + 0.5;
+    const dx = tx - v.x, dy = ty - v.y;
+    const d = Math.hypot(dx, dy);
+    const wading = this.water[this.tileOf(v.x, v.y)] >= WADE_SLOW_DEPTH;
+    const step = MOVE_SPEED * (wading ? WATER_SLOWDOWN : 1);
+    if (d <= step) { v.x = tx; v.y = ty; v.pi++; return v.pi >= path.length ? 'arrived' : 'moving'; }
+    v.x += (dx / d) * step;
+    v.y += (dy / d) * step;
+    return 'moving';
+  }
+
   private stepVillager(v: Villager): void {
+    if (v.wait > 0) { v.wait--; return; }
     switch (v.state) {
       case 'idle': return this.decide(v);
       case 'toTarget': {
-        const t = this.targetPos(v);
-        if (!t || !this.targetValid(v)) { v.state = 'idle'; v.targetId = null; return; }
-        if (this.moveToward(v, t.x, t.y, t.reach)) {
+        if (!this.targetValid(v)) { this.resetTask(v); return; }
+        const r = this.follow(v);
+        if (r === 'blocked') { this.resetTask(v); v.wait = RETRY_TICKS; return; }
+        if (r === 'arrived') {
           v.state = 'working';
           v.workLeft = v.job === 'build' ? Infinity : GATHER_TICKS;
         }
@@ -301,15 +396,21 @@ export class World {
       }
       case 'working': return this.work(v);
       case 'toStore': {
-        const hall = this.nearestStore(v);
-        if (this.moveToward(v, hall.x + hall.w / 2, hall.y + hall.h / 2, Math.max(hall.w, hall.h) / 2 + 0.8)) {
+        if (!v.path) {
+          const stores = this.buildings.filter((b) => b.done && (b.kind === 'townhall' || b.kind === 'warehouse'));
+          const id = this.route(v, stores.map((b) => ({ id: b.id, x: b.x + b.w / 2, y: b.y + b.h / 2, reach: Math.max(b.w, b.h) / 2 + 0.7 })));
+          if (id === undefined) { v.wait = RETRY_TICKS; return; }
+        }
+        const r = this.follow(v);
+        if (r === 'blocked') { v.path = null; v.wait = RETRY_TICKS; return; }
+        if (r === 'arrived') {
           if (v.carryRes) {
             this.stock[v.carryRes] = Math.min(this.storageCap, this.stock[v.carryRes] + v.carry);
             v.xp += v.carry;
           }
           v.carry = 0;
           v.carryRes = null;
-          v.state = 'idle';
+          this.resetTask(v);
         }
         return;
       }
@@ -317,28 +418,48 @@ export class World {
   }
 
   private decide(v: Villager): void {
-    if (v.job === 'build') {
+    const cands = this.candidates(v.job);
+    const id = cands.length ? this.route(v, cands) : undefined;
+    if (id === undefined) { v.wait = RETRY_TICKS; return; } // sem alvo ou sem caminho: tenta de novo em instantes
+    v.targetId = id;
+    v.state = 'toTarget';
+  }
+
+  /** Alvos possíveis para a profissão: nós, prédios produtores e margem do rio. */
+  private candidates(job: Job): { id: number; x: number; y: number; reach: number }[] {
+    const c: { id: number; x: number; y: number; reach: number }[] = [];
+    const bReach = (b: Building): number => Math.max(b.w, b.h) / 2 + 0.7;
+    if (job === 'build') {
       const sites = this.buildings.filter((b) => !b.done);
-      if (!sites.length) return;
       const pri = sites.filter((b) => b.priority);
-      const pool = pri.length ? pri : sites;
-      const site = this.nearestBy(v, pool, (b) => b.x + b.w / 2, (b) => b.y + b.h / 2);
-      if (site) { v.targetId = site.id; v.state = 'toTarget'; }
-      return;
+      for (const b of pri.length ? pri : sites) c.push({ id: b.id, x: b.x + b.w / 2, y: b.y + b.h / 2, reach: bReach(b) });
+      return c;
     }
-    const src = this.nearestSource(v, v.job);
-    if (src !== undefined) { v.targetId = src; v.state = 'toTarget'; }
+    if (job === 'wood' || job === 'stone' || job === 'food') {
+      const kind: NodeKind = job === 'wood' ? 'tree' : job === 'stone' ? 'rock' : 'bush';
+      for (const n of this.nodes) if (n.kind === kind && this.nodeHarvestable(n)) c.push({ id: n.id, x: n.x + 0.5, y: n.y + 0.5, reach: REACH });
+    }
+    if (job === 'food' || job === 'water') {
+      const kind: BuildingKind = job === 'food' ? 'farm' : 'well';
+      for (const b of this.buildings) {
+        if (b.kind === kind && b.done && this.buildingWorks(b) && this.slotsFree(b)) c.push({ id: b.id, x: b.x + b.w / 2, y: b.y + b.h / 2, reach: bReach(b) });
+      }
+    }
+    if (job === 'water') {
+      for (const i of this.wet) c.push({ id: -(i + 1), x: (i % GRID_W) + 0.5, y: Math.floor(i / GRID_W) + 0.5, reach: REACH });
+    }
+    return c;
   }
 
   private work(v: Villager): void {
     if (v.job === 'build') {
       const b = this.buildings.find((x) => x.id === v.targetId);
-      if (!b || b.done) { v.state = 'idle'; v.targetId = null; return; }
+      if (!b || b.done) { this.resetTask(v); return; }
       b.progress += this.speedFactor();
       if (b.progress >= b.workNeeded) this.finish(b);
       return;
     }
-    if (!this.targetValid(v)) { v.state = 'idle'; v.targetId = null; return; }
+    if (!this.targetValid(v)) { this.resetTask(v); return; }
     v.workLeft -= this.speedFactor();
     if (v.workLeft > 0) return;
     const res = v.job as Resource;
@@ -356,6 +477,8 @@ export class World {
     v.carryRes = res;
     v.state = 'toStore';
     v.targetId = null;
+    v.path = null;
+    v.pi = 0;
   }
 
   private finish(b: Building): void {
@@ -371,40 +494,15 @@ export class World {
     }
     this.events.push(`${BUILDINGS[b.kind as PlaceableKind].label} concluída!`);
     for (const o of this.villagers) {
-      if (o.job === 'build' && o.targetId === b.id) { o.state = 'idle'; o.targetId = null; }
+      if (o.job === 'build' && o.targetId === b.id) this.resetTask(o);
     }
-  }
-
-  private moveToward(v: Villager, tx: number, ty: number, reach: number): boolean {
-    const dx = tx - v.x, dy = ty - v.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist <= reach) return true;
-    const inWater = this.water[this.idx(Math.min(GRID_W - 1, Math.max(0, Math.floor(v.x))), Math.min(GRID_H - 1, Math.max(0, Math.floor(v.y))))] > 0.3;
-    const step = Math.min(MOVE_SPEED * (inWater ? WATER_SLOWDOWN : 1), dist - reach);
-    v.x += (dx / dist) * step;
-    v.y += (dy / dist) * step;
-    return dist - step <= reach + 1e-9;
-  }
-
-  private targetPos(v: Villager): { x: number; y: number; reach: number } | null {
-    const id = v.targetId;
-    if (id === null) return null;
-    if (id < 0) {
-      const i = -id - 1;
-      return { x: (i % GRID_W) + 0.5, y: Math.floor(i / GRID_W) + 0.5, reach: REACH };
-    }
-    const b = this.buildings.find((x) => x.id === id);
-    if (b) return { x: b.x + b.w / 2, y: b.y + b.h / 2, reach: Math.max(b.w, b.h) / 2 + 0.7 };
-    const n = this.nodes.find((x) => x.id === id);
-    if (n) return { x: n.x + 0.5, y: n.y + 0.5, reach: REACH };
-    return null;
   }
 
   /** O alvo ainda serve? (a seca pode ter secado o poço, a fazenda ou a margem) */
   private targetValid(v: Villager): boolean {
     const id = v.targetId;
     if (id === null) return false;
-    if (v.job === 'build') return true;
+    if (v.job === 'build') return this.buildings.some((b) => b.id === id && !b.done);
     if (id < 0) return this.water[-id - 1] >= WET_DEPTH * 0.6;
     const b = this.buildings.find((x) => x.id === id);
     if (b) return b.done && this.buildingWorks(b);
@@ -440,40 +538,6 @@ export class World {
     return used < slots;
   }
 
-  /** Fonte mais próxima para um recurso. Devolve id de nó/prédio, ou -(tile+1) para água do rio. */
-  private nearestSource(v: Villager, res: Resource): number | undefined {
-    const c: { id: number; x: number; y: number }[] = [];
-    if (res === 'wood' || res === 'stone' || res === 'food') {
-      const kind: NodeKind = res === 'wood' ? 'tree' : res === 'stone' ? 'rock' : 'bush';
-      for (const n of this.nodes) if (n.kind === kind && this.nodeHarvestable(n)) c.push({ id: n.id, x: n.x + 0.5, y: n.y + 0.5 });
-    }
-    if (res === 'food' || res === 'water') {
-      const kind: BuildingKind = res === 'food' ? 'farm' : 'well';
-      for (const b of this.buildings) {
-        if (b.kind === kind && b.done && this.buildingWorks(b) && this.slotsFree(b)) c.push({ id: b.id, x: b.x + b.w / 2, y: b.y + b.h / 2 });
-      }
-    }
-    if (res === 'water') {
-      for (const i of this.wet) c.push({ id: -(i + 1), x: (i % GRID_W) + 0.5, y: Math.floor(i / GRID_W) + 0.5 });
-    }
-    return this.nearestBy(v, c, (t) => t.x, (t) => t.y)?.id;
-  }
-
-  private nearestBy<T>(v: Villager, list: T[], gx: (t: T) => number, gy: (t: T) => number): T | undefined {
-    let best: T | undefined;
-    let bd = Infinity;
-    for (const t of list) {
-      const dd = (gx(t) - v.x) ** 2 + (gy(t) - v.y) ** 2;
-      if (dd < bd) { bd = dd; best = t; }
-    }
-    return best;
-  }
-
-  private nearestStore(v: Villager): Building {
-    const stores = this.buildings.filter((b) => b.done && (b.kind === 'townhall' || b.kind === 'warehouse'));
-    return this.nearestBy(v, stores, (b) => b.x + b.w / 2, (b) => b.y + b.h / 2)!;
-  }
-
   /** Profissão inicial: o recurso mais escasso, descontando quem já trabalha nele. */
   private neediestResource(): Resource {
     const score = (r: Resource): number => this.stock[r] + 12 * this.villagers.filter((v) => v.job === r).length;
@@ -487,8 +551,8 @@ export class World {
     return x >= 1 && y >= 1 && x + w <= GRID_W - 1 && y + h <= GRID_H - 1;
   }
 
-  private markRect(x: number, y: number, w: number, h: number, val: number): void {
-    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.occ[this.idx(x + i, y + j)] = val;
+  private markRect(x: number, y: number, w: number, h: number, val: number, grid: Uint8Array = this.occ): void {
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) grid[this.idx(x + i, y + j)] = val;
   }
 
   private spotOk(kind: PlaceableKind, x: number, y: number): boolean {
@@ -516,6 +580,7 @@ export class World {
     const b: Building = { id: this.nextId++, kind, x, y, w, h, progress: done ? work : 0, workNeeded: work, done, priority: false };
     this.buildings.push(b);
     this.markRect(x, y, w, h, 1);
+    this.markRect(x, y, w, h, 1, this.blocked);
     return b;
   }
 

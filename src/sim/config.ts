@@ -26,6 +26,10 @@ export const DAM_RAISE = 2; // quanto a represa sobe o terreno
 // ---- aldeões ----
 export const MOVE_SPEED = 0.1; // tiles por tick
 export const WATER_SLOWDOWN = 0.5;
+export const WADE_SLOW_DEPTH = 0.3; // acima disso andar custa mais e é mais lento
+export const MAX_WADE = 1.0; // acima disso a água fecha o caminho
+export const MAX_STEP = 1; // desnível máximo entre tiles vizinhos (degrau); mais que isso é penhasco
+export const RETRY_TICKS = 20; // espera antes de procurar outra tarefa quando não há caminho
 export const REACH = 1.4;
 export const GATHER_TICKS = 30;
 export const CARRY_CAPACITY = 5;
