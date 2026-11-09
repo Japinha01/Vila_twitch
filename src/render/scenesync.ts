@@ -10,6 +10,7 @@ import { COLORS, makeBuilding, makeBush, makeRock, makeTree, mat } from './model
 import { HS } from './terrain';
 
 const MAX_VILLAGERS = 600;
+const MAX_NAMES = 120; // acima disso a tela vira só texto
 const LOAD_COLOR: Record<Resource, string> = { wood: '#a9743d', stone: '#868e96', food: '#e03131', water: '#339af0' };
 
 /** Faz o grupo projetar sombra. */
@@ -30,6 +31,10 @@ export class SceneSync {
   private tmp = new Color();
   private bars = new Map<number, Group>(); // barra de progresso das obras
   private floods = new Map<number, Mesh>(); // véu azul em prédio alagado
+  /** nomes flutuando sobre os aldeões (overlay da live) */
+  names = false;
+  private nameSprites = new Map<number, Sprite>();
+  private nameTex = new Map<string, CanvasTexture>();
   private ring: Mesh;
   private label: Sprite | null = null;
   private labelFor = -1;
@@ -60,7 +65,51 @@ export class SceneSync {
     this.syncBuildings(camera);
     this.syncVillagers(time);
     this.syncSelection(camera, selectedId);
+    this.syncNames();
   }
+
+  /** Textura do nome (uma por nome, reaproveitada). */
+  private nameTexture(name: string): CanvasTexture {
+    let t = this.nameTex.get(name);
+    if (!t) {
+      const c = document.createElement('canvas');
+      c.width = 256; c.height = 56;
+      const g = c.getContext('2d')!;
+      g.font = 'bold 30px sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.lineWidth = 6; g.strokeStyle = 'rgba(10,14,18,0.9)'; g.lineJoin = 'round';
+      g.strokeText(name.slice(0, 18), 128, 30);
+      g.fillStyle = '#fff';
+      g.fillText(name.slice(0, 18), 128, 30);
+      t = new CanvasTexture(c);
+      this.nameTex.set(name, t);
+      if (this.nameTex.size > 400) { for (const [k, v] of this.nameTex) { v.dispose(); this.nameTex.delete(k); if (this.nameTex.size <= 300) break; } }
+    }
+    return t;
+  }
+
+  private syncNames(): void {
+    const list = this.names ? this.world.villagers.slice(0, MAX_NAMES) : [];
+    const seen = new Set<number>();
+    for (const v of list) {
+      seen.add(v.id);
+      let sp = this.nameSprites.get(v.id);
+      const tex = this.nameTexture(v.name);
+      if (!sp) {
+        sp = new Sprite(new SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+        sp.scale.set(1.8, 0.39, 1);
+        sp.renderOrder = 7;
+        this.scene.add(sp);
+        this.nameSprites.set(v.id, sp);
+      } else if ((sp.material as SpriteMaterial).map !== tex) {
+        (sp.material as SpriteMaterial).map = tex;
+        sp.material.needsUpdate = true;
+      }
+      sp.position.set(v.x, this.world.groundZ(v.x, v.y) * HS + 0.78, v.y);
+    }
+    for (const [id, sp] of this.nameSprites) if (!seen.has(id)) { this.scene.remove(sp); sp.material.dispose(); this.nameSprites.delete(id); }
+  }
+
 
   /** Anel e nome sobre o aldeão selecionado. */
   private syncSelection(camera: Camera, selectedId: number | null): void {
