@@ -19,6 +19,8 @@ export class Renderer3D implements GameView {
   ghost: Ghost | null = null;
   hoverTile: { x: number; y: number } | null = null;
   selectedId: number | null = null;
+  followId: number | null = null;
+  private lastDraw = 0;
 
   private gl: WebGLRenderer;
   private scene = new Scene();
@@ -167,11 +169,13 @@ export class Renderer3D implements GameView {
   }
 
   centerOn(x: number, y: number): void {
+    this.followId = null;
     this.target.set(x, this.world.groundZ(x, y) * HS, y);
     this.placeCamera();
   }
 
   panBy(dxCss: number, dyCss: number): void {
+    this.followId = null; // mexeu na câmera: solta o aldeão
     const k = (2 * this.dist * Math.tan((FOV * Math.PI) / 360)) / this.cssH; // tiles por pixel
     const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw); // direção "direita" no chão
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw); // direção "para frente" no chão
@@ -227,6 +231,7 @@ export class Renderer3D implements GameView {
     }
     const now = performance.now() / 1000;
     this.sync.update(now, this.camera, this.selectedId);
+    this.followStep(now);
     const q = fillWater(w, this.waterPos, now);
     this.water.geometry.setDrawRange(0, q * 6);
     (this.water.geometry.getAttribute('position') as BufferAttribute).needsUpdate = true;
@@ -237,6 +242,21 @@ export class Renderer3D implements GameView {
   }
 
   /** Céu e luz mudam com a estação: azulado e fresco na temperada, quente e pálido na seca. */
+  /** Câmera acompanhando o aldeão: o alvo desliza até ele; giro e zoom continuam livres. */
+  private followStep(now: number): void {
+    const dt = Math.min(0.25, Math.max(0, now - this.lastDraw));
+    this.lastDraw = now;
+    if (this.followId === null) return;
+    const v = this.world.villagers.find((q) => q.id === this.followId);
+    if (!v) { this.followId = null; return; }
+    const p = this.sync.positionOf(v.id) ?? v;
+    const k = 1 - Math.exp(-dt * 5);
+    this.target.x += (p.x - this.target.x) * k;
+    this.target.z += (p.y - this.target.z) * k;
+    this.target.y += (this.world.groundZ(p.x, p.y) * HS - this.target.y) * k;
+    this.placeCamera();
+  }
+
   private updateMood(): void {
     const target = this.world.season.drought ? 1 : 0;
     this.mood += (target - this.mood) * 0.02;
