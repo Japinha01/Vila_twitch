@@ -207,3 +207,20 @@ A vila contra desastres e ondas de inimigos controladas pelo jogo. É barato de 
 - Guerra de Objetivos: os 4 jogadores são 4 canais (suposição atual)? Quanto dura a partida (uma live, uma semana)?
 - Eventos: quais são grátis (moedas) e quais exigem pontos ou doação? Qual o valor mínimo de doação?
 - Cosméticos: só por conquista, ou também compra com Pix? (se vender, definir termos e impostos)
+
+---
+
+## Como rodar (M0)
+
+Requer Node 20+.
+
+```bash
+npm install
+npm run dev      # abre em http://localhost:5173
+npm test         # testes da simulação e do chat
+npm run build    # gera a pasta dist/
+```
+
+**Publicar:** suba o repositório no GitHub, importe na Vercel (preset *Vite*; build `npm run build`, saída `dist`) e cada push na `main` publica sozinho.
+
+**Estrutura:** `src/sim` (lógica pura, determinística), `src/chat` (comandos: validação → cooldown → fila → efeito), `src/render` (Canvas, vetor flat), `src/ui` (painel e chat simulado). Atalhos: espaço pausa; 1, 2 e 3 = x1, x2 e x4.

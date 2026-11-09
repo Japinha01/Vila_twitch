@@ -1,0 +1,25 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #1f2a24; color: #e9ecef; }
+#app { display: flex; height: 100%; }
+#stage { flex: 1; min-width: 0; position: relative; }
+#game { position: absolute; inset: 0; display: block; }
+#side { width: 340px; padding: 12px; overflow-y: auto; background: #263238; display: flex; flex-direction: column; gap: 10px; }
+header { display: flex; justify-content: space-between; align-items: baseline; }
+h1 { font-size: 18px; margin: 0; } h2 { font-size: 14px; margin: 0 0 6px; }
+#clock { font-size: 13px; opacity: .8; }
+.card { background: #2f3d44; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+button { background: #455a64; color: inherit; border: 0; border-radius: 6px; padding: 6px 9px; font: inherit; font-size: 13px; cursor: pointer; }
+button:hover { background: #546e7a; } button.on { background: #f08c00; color: #212529; font-weight: 600; }
+#speed button { flex: 1; }
+input { min-width: 0; background: #1c262b; color: inherit; border: 1px solid #455a64; border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px; }
+#who { width: 90px; } #msg { flex: 1; }
+.res { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 6px; font-size: 13px; }
+.bar { height: 8px; border-radius: 4px; background: #1c262b; overflow: hidden; } .bar i { display: block; height: 100%; }
+#pop, #queueinfo { font-size: 12px; opacity: .85; }
+#log { height: 220px; overflow-y: auto; font-size: 12px; background: #1c262b; border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+#log .me { color: #ced4da; } #log .bot { color: #ffd43b; } #log .ev { color: #8ce99a; }
+@media (max-width: 800px) {
+  #app { flex-direction: column; } #stage { flex: none; height: 50vh; } #side { width: auto; flex: 1; }
+}
