@@ -6,6 +6,7 @@ import { World } from '../src/sim/world';
 describe('equilíbrio', () => {
   it('com o estoque cheio ninguém gasta recurso finito: as pedras não somem à toa', () => {
     const w = new World(2);
+    w.autonomy = false; // testa só a coleta, sem obras gastando o estoque
     w.addVillager('a', 'A', '#fff');
     w.setJob('a', 'stone');
     w.stock.stone = w.storageCap;
@@ -17,6 +18,7 @@ describe('equilíbrio', () => {
 
   it('o aldeão volta a trabalhar quando abre espaço no estoque', () => {
     const w = new World(2);
+    w.autonomy = false; // testa só a coleta, sem obras gastando o estoque
     w.addVillager('a', 'A', '#fff');
     w.setJob('a', 'stone');
     w.stock.stone = w.storageCap;
@@ -28,6 +30,7 @@ describe('equilíbrio', () => {
 
   it('a pedreira é fonte de pedra quando as pedras do mapa acabam', () => {
     const w = new World(2);
+    w.autonomy = false;
     w.stock = { wood: 999, stone: 10, food: 50, water: 50 };
     let s: { x: number; y: number } | null = null;
     for (let y = 0; y < GRID_H && !s; y++) for (let x = 0; x < GRID_W && !s; x++) if (w.canPlace('quarry', x, y).ok) s = { x, y };

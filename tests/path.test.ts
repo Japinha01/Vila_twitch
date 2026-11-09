@@ -77,6 +77,7 @@ describe('caminhos na vila', () => {
 
   it('o aldeão atravessa o rio (vau raso) para chegar ao outro lado', () => {
     const w = new World(1);
+    w.autonomy = false; // o estoque não pode ser gasto em obras durante o teste
     const v = w.addVillager('a', 'A', '#fff');
     if (!v.ok) throw new Error('aldeão');
     // só árvores do outro lado do rio: ele precisa cruzar
