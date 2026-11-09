@@ -30,7 +30,7 @@ export const ERAS: Era[] = [
     ],
   },
   {
-    name: 'Era Medieval', icon: '🏰', tagline: 'Armazéns cheios e uma vila de verdade.',
+    name: 'Era Medieval', icon: '🏰', tagline: 'A fogueira virou prefeitura e a vila ganhou armazéns.',
     goals: [
       { label: 'aldeões', icon: '👥', have: (s) => s.pop, need: 16 },
       { label: 'casas', icon: '🏠', have: built('house'), need: 3 },

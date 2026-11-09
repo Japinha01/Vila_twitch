@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -93,6 +93,7 @@ export class World {
   readonly irrigated = new Uint8Array(N);
   /** 1 = ponte concluída: dá para atravessar a água e o degrau da margem */
   readonly bridge = new Uint8Array(N);
+  readonly forest = new Uint8Array(N); // 1 = tile com árvore (conta como ocupado, mas dá para limpar)
   readonly road = new Uint8Array(N); // 1 = estrada (não fecha o caminho, anda-se mais rápido)
   readonly zone = new Uint8Array(N); // ZoneKind pintada pelo streamer
   /** altura do tabuleiro onde há ponte */
@@ -178,7 +179,8 @@ export class World {
     if (data.road?.length === N) this.road.set(data.road);
     if (data.zone?.length === N) this.zone.set(data.zone);
     this.occ.fill(0); this.blocked.fill(0);
-    for (const n of this.nodes) this.occ[this.idx(n.x, n.y)] = 1;
+    this.forest.fill(0);
+    for (const n of this.nodes) { this.occ[this.idx(n.x, n.y)] = 1; if (n.kind === 'tree') this.forest[this.idx(n.x, n.y)] = 1; }
     for (const b of this.buildings) { this.markRect(b.x, b.y, b.w, b.h, 1); if (b.kind !== 'bridge') this.markRect(b.x, b.y, b.w, b.h, 1, this.blocked); }
     this.rebuildBridges();
     this.wet.length = 0;
@@ -233,7 +235,7 @@ export class World {
   canRoad(x: number, y: number): PlaceCheck {
     if (x < 1 || y < 1 || x >= GRID_W - 1 || y >= GRID_H - 1) return { ok: false, reason: 'space' };
     const t = this.idx(x, y);
-    if (this.road[t] || this.occ[t] || this.dam[t] || this.channel[t] || this.water[t] > 0.05) return { ok: false, reason: 'space' };
+    if (this.road[t] || (this.occ[t] && !this.forest[t]) || this.dam[t] || this.channel[t] || this.water[t] > 0.05) return { ok: false, reason: 'space' };
     const missing: Partial<Stock> = {};
     for (const r of RESOURCES) { const need = ROAD_COST[r] ?? 0; if (this.stock[r] < need) missing[r] = need - this.stock[r]; }
     return Object.keys(missing).length ? { ok: false, reason: 'cost', missing } : { ok: true };
@@ -244,6 +246,7 @@ export class World {
     const c = this.canRoad(x, y);
     if (!c.ok) return c;
     for (const r of RESOURCES) this.stock[r] -= ROAD_COST[r] ?? 0;
+    this.clearTrees(x, y, 1, 1);
     this.road[this.idx(x, y)] = 1;
     return { ok: true };
   }
@@ -336,7 +339,7 @@ export class World {
       any = true;
     }
     if (!any) return;
-    const free = (t: number): boolean => !this.occ[t] && !this.dam[t] && !this.channel[t] && this.water[t] <= 0.05 && !this.bridge[t];
+    const free = (t: number): boolean => (!this.occ[t] || this.forest[t] === 1) && !this.dam[t] && !this.channel[t] && this.water[t] <= 0.05 && !this.bridge[t];
     const prev = new Int32Array(N).fill(-2); // -2 não visitado, -1 origem
     const queue: number[] = [];
     const seed = (t: number): void => { if (prev[t] === -2 && (this.road[t] || free(t))) { prev[t] = -1; queue.push(t); } };
@@ -462,6 +465,7 @@ export class World {
     if (!c.ok) return c;
     const spec = BUILDINGS[kind];
     for (const r of RESOURCES) this.stock[r] -= spec.cost[r] ?? 0;
+    this.clearTrees(x, y, spec.w, spec.h);
     const b = this.placeBuilding(kind, x, y, spec.w, spec.h, spec.work, false);
     if (kind !== 'bridge') this.evict(b);
     return { ok: true, building: b };
@@ -588,11 +592,35 @@ export class World {
     this.stock.water = Math.max(0, this.stock.water - n);
   }
 
+  private regrowCount = 0;
+
   private regrow(): void {
+    this.regrowCount++;
     for (const n of this.nodes) {
       if (n.kind === 'rock' || n.amount >= NODE_MAX[n.kind]) continue;
       if (this.irrigated[this.idx(n.x, n.y)]) n.amount += 1;
+      else if (n.kind === 'tree' && this.regrowCount % SAPLING_GROW_EVERY === 0) n.amount += 1; // a floresta se refaz devagar
     }
+    // a floresta se espalha: uma muda nasce ao lado de uma árvore, longe de prédios, estradas e zonas
+    const trees = this.nodes.filter((n) => n.kind === 'tree' && n.amount >= MIN_HARVEST);
+    if (trees.length && this.rng() < SAPLING_CHANCE) {
+      const t = trees[Math.floor(this.rng() * trees.length)];
+      const x = t.x + Math.floor(this.rng() * 3) - 1, y = t.y + Math.floor(this.rng() * 3) - 1;
+      if (x >= 1 && y >= 1 && x < GRID_W - 1 && y < GRID_H - 1 && this.saplingOk(x, y)) {
+        this.nodes.push({ id: this.nextId++, kind: 'tree', x, y, amount: 0 });
+        this.occ[this.idx(x, y)] = 1; this.forest[this.idx(x, y)] = 1;
+      }
+    }
+  }
+
+  private saplingOk(x: number, y: number): boolean {
+    const i = this.idx(x, y);
+    if (this.occ[i] || this.channel[i] || this.water[i] > 0.02 || this.road[i] || this.zone[i] || this.dam[i]) return false;
+    for (let j = -2; j <= 2; j++) for (let k = -2; k <= 2; k++) {
+      const nx = x + k, ny = y + j;
+      if (nx >= 0 && ny >= 0 && nx < GRID_W && ny < GRID_H && (this.blocked[this.idx(nx, ny)] || this.road[this.idx(nx, ny)])) return false;
+    }
+    return true;
   }
 
   // ---------- água ----------
@@ -846,6 +874,7 @@ export class World {
       amt = Math.min(amt, node.amount);
       node.amount -= amt;
       if (node.kind === 'rock' && node.amount <= 0) this.removeNode(node);
+      else if (node.kind === 'tree' && node.amount < MIN_HARVEST) this.removeNode(node); // árvore derrubada: o tile fica livre (clareira)
     }
     v.carry = amt;
     v.carryRes = res;
@@ -1093,6 +1122,7 @@ export class World {
         const d = (x + w / 2 - cx) ** 2 + (y + h / 2 - cy) ** 2;
         if (d > maxD ** 2 || d < 9) continue;
         let score = d;
+        for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (this.forest[this.idx(x + i, y + j)]) score += 5; // prefere clareira: cada árvore a derrubar pesa
         if (rocks.length) score = Math.min(...rocks.map((n) => (n.x - x) ** 2 + (n.y - y) ** 2)) * 4 + d * 0.1;
         if (score >= bs) continue;
         if (!this.spotOk(kind, x, y) || !this.roomAround(x, y, w, h)) continue;
@@ -1166,7 +1196,7 @@ export class World {
     for (let j = 0; j < h; j++) {
       for (let i = 0; i < w; i++) {
         const t = this.idx(x + i, y + j);
-        if (this.occ[t] || this.dam[t] || this.road[t]) return false;
+        if ((this.occ[t] && !this.forest[t]) || this.dam[t] || this.road[t]) return false; // árvore não impede: a obra limpa o terreno
         if (kind === 'dam' || kind === 'bridge') { if (!this.channel[t]) return false; continue; }
         if (this.channel[t] || this.water[t] > 0.05 || this.height[t] !== h0) return false;
       }
@@ -1188,9 +1218,19 @@ export class World {
     return b;
   }
 
+  /** Derruba as árvores do retângulo (a obra abre espaço na floresta). */
+  private clearTrees(x: number, y: number, w: number, h: number): void {
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      if (!this.forest[this.idx(x + i, y + j)]) continue;
+      const n = this.nodes.find((q) => q.kind === 'tree' && q.x === x + i && q.y === y + j);
+      if (n) this.removeNode(n);
+    }
+  }
+
   private removeNode(n: ResourceNode): void {
     this.nodes.splice(this.nodes.indexOf(n), 1);
     this.occ[this.idx(n.x, n.y)] = 0;
+    this.forest[this.idx(n.x, n.y)] = 0;
   }
 
   // ---------- geração do mapa ----------
@@ -1277,7 +1317,20 @@ export class World {
         count--;
       }
     };
-    scatter('tree', Math.round((50 + Math.floor(this.rng() * 24)) * MAP_SCALE), 4, true);
+    // floresta fechada perto do acampamento que vai rareando com a distância, mais cheia no bioma de floresta
+    for (let y = 1; y < GRID_H - 1; y++) {
+      for (let x = 1; x < GRID_W - 1; x++) {
+        const i = this.idx(x, y);
+        if (this.occ[i] || this.channel[i] || this.water[i] > 0.02) continue;
+        const d = Math.hypot(x - hx - 1, y - hy - 1);
+        if (d < CLEARING_RADIUS) continue;
+        const fade = Math.min(1, Math.max(0, (d - FOREST_FADE_START) / FOREST_FADE_LEN));
+        const biome = this.biome[i] === BIOME_FOREST ? 1.25 : this.biome[i] === BIOME_ROCKY ? 0.4 : 0.9;
+        if (this.rng() >= (FOREST_NEAR + (FOREST_FAR - FOREST_NEAR) * fade) * biome) continue;
+        this.nodes.push({ id: this.nextId++, kind: 'tree', x, y, amount: NODE_MAX.tree });
+        this.occ[i] = 1; this.forest[i] = 1;
+      }
+    }
     scatter('bush', Math.round((12 + Math.floor(this.rng() * 8)) * MAP_SCALE), 4, true);
     scatter('rock', Math.round((16 + Math.floor(this.rng() * 12)) * MAP_SCALE), 6, false);
   }

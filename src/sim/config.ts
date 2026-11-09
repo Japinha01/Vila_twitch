@@ -74,6 +74,14 @@ export const SUPPORT_MAX_TICKS = 900;
 export const START_STOCK: Stock = { wood: 60, stone: 30, food: 30, water: 30 };
 
 export const NODE_MAX = { tree: 40, rock: 40, bush: 25 } as const;
+// ---- floresta e clareira ----
+export const CLEARING_RADIUS = 3.2; // raio sem árvores ao redor da fogueira no começo
+export const FOREST_NEAR = 0.5; // chance de árvore por tile perto do acampamento (floresta fechada)
+export const FOREST_FAR = 0.1; // e longe dele
+export const FOREST_FADE_START = 6; // distância onde a floresta começa a rarear
+export const FOREST_FADE_LEN = 24; // e a distância em que chega ao mínimo
+export const SAPLING_CHANCE = 0.08; // por rebrota: chance de nascer uma muda perto de uma árvore
+export const SAPLING_GROW_EVERY = 3; // muda fora do solo irrigado cresce a cada tantas rebrotas
 export const MIN_HARVEST = 8; // abaixo disso a árvore/arbusto ainda é muda
 export const REGROW_EVERY = 20; // ticks por +1 de rebrota (só em solo irrigado)
 
