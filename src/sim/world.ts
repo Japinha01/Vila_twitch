@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -38,6 +38,8 @@ export interface SaveData {
   era?: number;
   road?: number[];
   zone?: number[];
+  springs?: number[];
+  canals?: number;
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
   buildings: Building[];
   nodes: ResourceNode[];
@@ -114,6 +116,10 @@ export class World {
   private events: string[] = [];
   era = 0; // índice em ERAS
   private roadAnnounced = false;
+  private baseSources = 0; // nascentes geradas com o mapa (rio e lagos)
+  private springs: number[] = []; // nascentes criadas pelo streamer
+  private canals = 0; // canais cavados pelos aldeões
+  private needIrrigation = false; // o planejador não achou terra irrigada para uma fazenda
   private prevDrought = false;
   private warned = false; // já avisou a seca que vem aí?
   private rx: number[] = []; // x esquerdo do leito por linha
@@ -129,7 +135,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
-      road: Array.from(this.road), zone: Array.from(this.zone),
+      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals,
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -175,6 +181,10 @@ export class World {
     const reliefChanged = data.height.some((h, i) => h !== this.height[i]);
     this.height.set(data.height); this.water.set(data.water); this.moisture.set(data.moisture);
     this.dam.set(data.dam); this.irrigated.set(data.irrigated);
+    this.sources.length = this.baseSources; this.sourceRates.length = this.baseSources; // nascentes do mapa; as do streamer voltam do save
+    this.springs = [];
+    for (const t of data.springs ?? []) this.pushSpring(t);
+    this.canals = data.canals ?? 0;
     this.road.fill(0); this.zone.fill(0);
     if (data.road?.length === N) this.road.set(data.road);
     if (data.zone?.length === N) this.zone.set(data.zone);
@@ -228,6 +238,138 @@ export class World {
     const tx = fx - x0, ty = fy - y0;
     const h = (a: number, b: number): number => { const t = this.idx(a, b); return this.bridge[t] ? this.deck[t] : this.height[t]; };
     return (h(x0, y0) * (1 - tx) + h(x0 + 1, y0) * tx) * (1 - ty) + (h(x0, y0 + 1) * (1 - tx) + h(x0 + 1, y0 + 1) * tx) * ty;
+  }
+
+  // ---------- terreno ----------
+  private terraformCheck(x: number, y: number): boolean {
+    if (x < 1 || y < 1 || x >= GRID_W - 1 || y >= GRID_H - 1) return false;
+    const t = this.idx(x, y);
+    return !((this.occ[t] && !this.forest[t]) || this.dam[t] || this.bridge[t]);
+  }
+
+  private lacks(cost: Partial<Record<Resource, number>>, n = 1): Partial<Stock> | null {
+    const missing: Partial<Stock> = {};
+    for (const r of RESOURCES) { const need = (cost[r] ?? 0) * n; if (this.stock[r] < need) missing[r] = need - this.stock[r]; }
+    return Object.keys(missing).length ? missing : null;
+  }
+
+  /** Cava (baixa 1 nível) ou eleva (sobe 1 nível) o terreno do tile; derruba a árvore que estiver nele. */
+  terraform(x: number, y: number, mode: 'dig' | 'raise'): PlaceCheck {
+    if (!this.terraformCheck(x, y)) return { ok: false, reason: 'space' };
+    const t = this.idx(x, y);
+    const nh = this.height[t] + (mode === 'dig' ? -1 : 1);
+    if (nh < 0 || nh > MAX_HEIGHT) return { ok: false, reason: 'space' };
+    const missing = this.lacks(mode === 'dig' ? DIG_COST : RAISE_COST);
+    if (missing) return { ok: false, reason: 'cost', missing };
+    for (const r of RESOURCES) this.stock[r] -= (mode === 'dig' ? DIG_COST : RAISE_COST)[r] ?? 0;
+    this.clearTrees(x, y, 1, 1);
+    this.height[t] = nh;
+    this.terrainVersion++;
+    return { ok: true };
+  }
+
+  private pushSpring(t: number): void { this.sources.push(t); this.sourceRates.push(SPRING_RATE); this.springs.push(t); }
+
+  /** Abre uma nascente: a água brota ali (só na estação temperada) e enche o que estiver cavado em volta. */
+  addSpring(x: number, y: number): PlaceCheck {
+    if (!this.terraformCheck(x, y) || this.springs.length >= MAX_SPRINGS) return { ok: false, reason: 'space' };
+    const t = this.idx(x, y);
+    if (this.sources.includes(t)) return { ok: false, reason: 'space' };
+    const missing = this.lacks(SPRING_COST);
+    if (missing) return { ok: false, reason: 'cost', missing };
+    for (const r of RESOURCES) this.stock[r] -= SPRING_COST[r] ?? 0;
+    this.clearTrees(x, y, 1, 1);
+    this.pushSpring(t);
+    this.water[t] += 0.5;
+    this.terrainVersion++; // redesenha (o marcador da nascente)
+    return { ok: true };
+  }
+
+  springTiles(): readonly number[] { return this.springs; }
+
+  isSpring(x: number, y: number): boolean { return this.springs.includes(this.idx(x, y)); }
+
+  /**
+   * Os aldeões cavam um canal da água mais próxima até terra que ainda não é irrigada perto da prefeitura.
+   * A água corre pelo canal (o fundo fica na altura do leito de onde ela vem) e irriga em volta.
+   */
+  private autoCanal(): boolean {
+    if (this.canals >= AUTO_CANAL_MAX) return false;
+    const hall = this.townHall();
+    const hx = hall.x + hall.w / 2, hy = hall.y + hall.h / 2;
+    const landFree = (t: number): boolean => !((this.occ[t] && !this.forest[t]) || this.dam[t] || this.bridge[t] || this.road[t] || this.channel[t]) && this.water[t] < 0.05;
+    const prev = new Int32Array(N).fill(-2);
+    const lvl = new Int32Array(N); // altura do leito de origem
+    const len = new Int32Array(N);
+    const queue: number[] = [];
+    for (let t = 0; t < N; t++) if (this.water[t] >= 0.25 && !this.dam[t]) { prev[t] = -1; lvl[t] = this.height[t]; queue.push(t); }
+    let end = -1;
+    for (let qi = 0; qi < queue.length && end < 0; qi++) {
+      const t = queue[qi];
+      const x = t % GRID_W, y = (t - x) / GRID_W;
+      if (prev[t] !== -1) {
+        const d = Math.hypot(x + 0.5 - hx, y + 0.5 - hy);
+        if (d >= 3 && d <= 13 && !this.irrigated[t]) { end = t; break; }
+      }
+      if (len[t] >= AUTO_CANAL_MAX_LEN) continue;
+      for (let k = 0; k < 4; k++) {
+        const nx = x + DX[k], ny = y + DY[k];
+        if (nx < 1 || ny < 1 || nx >= GRID_W - 1 || ny >= GRID_H - 1) continue;
+        const u = this.idx(nx, ny);
+        if (prev[u] !== -2 || !landFree(u) || this.height[u] - lvl[t] > AUTO_CANAL_MAX_DEPTH) continue;
+        prev[u] = t; lvl[u] = lvl[t]; len[u] = len[t] + 1; queue.push(u);
+      }
+    }
+    if (end < 0) return false;
+    const path: number[] = [];
+    for (let t = end; prev[t] !== -1; t = prev[t]) path.push(t);
+    let levels = 0;
+    for (const t of path) levels += Math.max(0, this.height[t] - lvl[end]);
+    levels = Math.max(levels, path.length);
+    if (this.lacks(DIG_COST, levels)) return false;
+    for (const r of RESOURCES) this.stock[r] -= (DIG_COST[r] ?? 0) * levels;
+    for (const t of path) {
+      this.clearTrees(t % GRID_W, Math.floor(t / GRID_W), 1, 1);
+      this.height[t] = Math.min(this.height[t], lvl[end]);
+    }
+    this.canals++;
+    this.terrainVersion++;
+    this.events.push('⛏ Os aldeões cavaram um canal para levar água a terra seca e irrigar novas lavouras.');
+    return true;
+  }
+
+  /** Terreno quase plano (desnível de 1) perto da prefeitura: os aldeões aplainam para caber o prédio. */
+  private autoLevel(kind: PlaceableKind): { x: number; y: number } | null {
+    const { w, h } = BUILDINGS[kind];
+    const hall = this.townHall();
+    const cx = hall.x + hall.w / 2, cy = hall.y + hall.h / 2;
+    let best: { x: number; y: number; lo: number; cost: number } | null = null;
+    let bd = Infinity;
+    for (let y = 1; y < GRID_H - h; y++) {
+      for (let x = 1; x < GRID_W - w; x++) {
+        const d = (x + w / 2 - cx) ** 2 + (y + h / 2 - cy) ** 2;
+        if (d >= bd || d > AUTO_BUILD_MAX_DIST ** 2 || d < 9) continue;
+        let lo = Infinity, hi = -Infinity, ok = true;
+        for (let j = 0; j < h && ok; j++) for (let i = 0; i < w; i++) {
+          const t = this.idx(x + i, y + j);
+          if ((this.occ[t] && !this.forest[t]) || this.dam[t] || this.road[t] || this.channel[t] || this.zone[t] || this.water[t] > 0.05) { ok = false; break; }
+          lo = Math.min(lo, this.height[t]); hi = Math.max(hi, this.height[t]);
+        }
+        if (!ok || hi - lo !== 1 || !this.roomAround(x, y, w, h)) continue;
+        let cost = 0;
+        for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (this.height[this.idx(x + i, y + j)] > lo) cost++;
+        best = { x, y, lo, cost }; bd = d;
+      }
+    }
+    if (!best || this.lacks(DIG_COST, best.cost)) return null;
+    for (const r of RESOURCES) this.stock[r] -= (DIG_COST[r] ?? 0) * best.cost;
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      const t = this.idx(best.x + i, best.y + j);
+      this.clearTrees(best.x + i, best.y + j, 1, 1);
+      this.height[t] = best.lo;
+    }
+    this.terrainVersion++;
+    return { x: best.x, y: best.y };
   }
 
   // ---------- estradas e zonas ----------
@@ -1077,6 +1219,7 @@ export class World {
     for (let i = 0; i < N; i++) if (this.wadeTraffic[i] > 0) this.wadeTraffic[i] *= 0.92; // o trânsito antigo vai sendo esquecido
     this.autoJobs();
     this.autoPlan();
+    if ((this.tick / AUTONOMY_EVERY) % 5 === 0 && this.needIrrigation) { this.needIrrigation = false; this.autoCanal(); }
     if ((this.tick / AUTONOMY_EVERY) % 3 === 0) { this.autoBridge(); this.autoRoad(); } // procuram mais raramente: é um cálculo maior
   }
 
@@ -1154,7 +1297,12 @@ export class World {
     if (pop >= 8 && this.stock.wood < 30 && this.countKind('sawmill') === 0) needs.push({ kind: 'sawmill', art: 'uma', name: 'serraria', why: 'faltava madeira' });
     if (this.stock.stone < 20 && this.countKind('quarry') === 0) needs.push({ kind: 'quarry', art: 'uma', name: 'pedreira', why: 'faltava pedra' });
     for (const n of needs) {
-      const site = this.findSite(n.kind);
+      let site = this.findSite(n.kind);
+      if (!site && n.kind === 'farm') this.needIrrigation = true; // sem terra irrigada livre: cavam um canal
+      if (!site && !(this.zoneFor(n.kind) && this.hasZone(this.zoneFor(n.kind))) && n.kind !== 'farm' && n.kind !== 'well') {
+        site = this.autoLevel(n.kind); // sem lugar plano: aplainam um terreno
+        if (site) { this.events.push(`⛏ Os aldeões aplainaram um terreno para ${n.art} ${n.name}.`); return; } // constroem na próxima rodada
+      }
       if (!site) continue;
       const cost = BUILDINGS[n.kind].cost;
       const afford = RESOURCES.every((r) => this.stock[r] >= (cost[r] ?? 0) + (r === 'wood' ? AUTO_HOUSE_RESERVE : 0));
@@ -1288,6 +1436,7 @@ export class World {
     this.sources = [this.idx(this.rx[0], 0), this.idx(this.rx[0] + 1, 0)];
     this.sourceRates = [SOURCE_RATE, SOURCE_RATE];
     this.carveLakes(hx + 1, hy + 1);
+    this.baseSources = this.sources.length;
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
         const b = bnoise(x, y);

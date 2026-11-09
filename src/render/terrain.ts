@@ -13,6 +13,7 @@ const hex = (h: string): RGB => [lin(parseInt(h.slice(1, 3), 16)), lin(parseInt(
 // matiz por bioma (campo, floresta, terra pedregosa)
 const TINT: RGB[] = [[1, 1, 1], [0.82, 0.93, 0.8], [1.08, 0.97, 0.88]];
 const ROAD = hex('#6b6f76');
+const SPRING = hex('#74c0fc');
 const ZONE: RGB[] = [[0, 0, 0], hex('#40c057'), hex('#339af0'), hex('#f59f00')]; // residencial, comercial, industrial
 const GRASS = hex('#76c957'), DRY = hex('#c9b360'), STONE = hex('#adb5bd'), SOIL = hex('#8f5f33');
 
@@ -87,6 +88,12 @@ export function paintTops(w: World, colors: Float32Array): void {
     for (let k = 0; k < 4; k++) {
       const o = (i * 4 + k) * 3;
       colors[o] = c[0]; colors[o + 1] = c[1]; colors[o + 2] = c[2];
+    }
+  }
+  for (const i of w.springTiles()) { // nascentes do streamer ficam marcadas
+    for (let k = 0; k < 4; k++) {
+      const o = (i * 4 + k) * 3;
+      colors[o] = SPRING[0]; colors[o + 1] = SPRING[1]; colors[o + 2] = SPRING[2];
     }
   }
 }

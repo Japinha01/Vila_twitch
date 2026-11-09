@@ -13,7 +13,7 @@ const QUICK = [
   '!trabalhar madeira', '!trabalhar pedra', '!trabalhar comida', '!trabalhar água', '!trabalhar construir',
 ];
 
-type PaintWhat = 'road' | 'zone1' | 'zone2' | 'zone3' | 'erase';
+type PaintWhat = 'road' | 'zone1' | 'zone2' | 'zone3' | 'erase' | 'dig' | 'raise' | 'spring';
 type Tool = { type: 'none' } | { type: 'build'; kind: PlaceableKind } | { type: 'priority' } | { type: 'cancel' } | { type: 'paint'; what: PaintWhat };
 
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -86,7 +86,7 @@ export class Panel {
       pal.appendChild(b);
       this.paletteBtns.set(kind, b);
     }
-    document.querySelectorAll<HTMLButtonElement>('#paint button').forEach((b) =>
+    document.querySelectorAll<HTMLButtonElement>('#paint button, #terrain button').forEach((b) =>
       b.addEventListener('click', () => this.setTool({ type: 'paint', what: b.dataset.paint as PaintWhat })));
     $('tool-priority').addEventListener('click', () => this.setTool({ type: 'priority' }));
     $('tool-cancel').addEventListener('click', () => this.setTool({ type: 'cancel' }));
@@ -97,7 +97,7 @@ export class Panel {
     this.tool = same ? { type: 'none' } : t;
     this.view.ghost = null;
     this.paletteBtns.forEach((b, k) => b.classList.toggle('on', this.tool.type === 'build' && this.tool.kind === k));
-    document.querySelectorAll<HTMLButtonElement>('#paint button').forEach((b) =>
+    document.querySelectorAll<HTMLButtonElement>('#paint button, #terrain button').forEach((b) =>
       b.classList.toggle('on', this.tool.type === 'paint' && this.tool.what === b.dataset.paint));
     $('tool-priority').classList.toggle('on', this.tool.type === 'priority');
     $('tool-cancel').classList.toggle('on', this.tool.type === 'cancel');
@@ -108,6 +108,7 @@ export class Panel {
     const cv = $('game');
     let drag: { x: number; y: number; moved: number; button: number; paint: boolean } | null = null;
     let paintFailed = false; // avisa só uma vez por pincelada
+    let lastKey = ''; // um tile só é cavado/elevado uma vez por pincelada
     const local = (e: PointerEvent | WheelEvent): { x: number; y: number } => {
       const r = cv.getBoundingClientRect();
       return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -116,12 +117,17 @@ export class Panel {
     cv.addEventListener('pointerdown', (e) => {
       drag = { x: e.clientX, y: e.clientY, moved: 0, button: e.button, paint: this.tool.type === 'paint' && e.button === 0 };
       cv.setPointerCapture(e.pointerId);
-      if (drag.paint) { paintFailed = false; const p = local(e); this.paintAt(this.view.pickTile(p.x, p.y), () => { paintFailed = true; }); }
+      if (drag.paint) { paintFailed = false; lastKey = ''; const p = local(e); const t0 = this.view.pickTile(p.x, p.y); lastKey = t0 ? `${t0.x},${t0.y}` : ''; this.paintAt(t0, () => { paintFailed = true; }); }
     });
     cv.addEventListener('pointermove', (e) => {
       const p = local(e);
       if (drag?.paint && e.buttons & 1) {
-        this.paintAt(this.view.pickTile(p.x, p.y), () => { if (!paintFailed) { paintFailed = true; this.addLog('Faltam recursos para a estrada (madeira e pedra).', 'ev'); } });
+        const t1 = this.view.pickTile(p.x, p.y);
+        const key = t1 ? `${t1.x},${t1.y}` : '';
+        if (key !== lastKey) {
+          lastKey = key;
+          this.paintAt(t1, () => { if (!paintFailed) { paintFailed = true; this.addLog('Faltam recursos para esta ferramenta.', 'ev'); } });
+        }
       } else if (drag && (e.buttons & 1 || e.buttons & 4)) {
         const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
         drag.moved += Math.abs(dx) + Math.abs(dy);
@@ -153,6 +159,11 @@ export class Panel {
   private paintAt(t: { x: number; y: number } | null, onNoStock: () => void): void {
     if (!t || this.tool.type !== 'paint') return;
     const w = this.world, what = this.tool.what;
+    if (what === 'dig' || what === 'raise' || what === 'spring') {
+      const r = what === 'spring' ? w.addSpring(t.x, t.y) : w.terraform(t.x, t.y, what);
+      if (!r.ok && r.reason === 'cost') onNoStock();
+      return;
+    }
     if (what === 'road') {
       const r = w.paintRoad(t.x, t.y);
       if (!r.ok && r.reason === 'cost') onNoStock();
