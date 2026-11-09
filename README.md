@@ -210,7 +210,25 @@ A vila contra desastres e ondas de inimigos controladas pelo jogo. É barato de 
 
 ---
 
-## Como rodar (M0)
+## Como jogar (versão Timberborn)
+
+O **streamer joga como no Timberborn**: constrói e melhora a vila clicando no mapa. Os **viewers são os aldeões**: `!entrar` cria o aldeão e `!trabalhar madeira|pedra|comida|água|construir` define o que ele faz. O chat não constrói; quem decide a vila é o streamer.
+
+**Streamer (painel à direita):**
+- Escolha um prédio na paleta e clique no mapa (a prévia fica verde ou vermelha). Botão direito ou Esc cancela.
+- ★ Prioridade: clique numa obra para os construtores irem primeiro nela. ✖ Cancelar obra devolve os recursos.
+- Câmera: arraste para mover, roda do mouse dá zoom, duplo clique recentraliza. Velocidade: pausa, x1, x2, x4 (atalhos: espaço, 1, 2, 3).
+
+**Mundo:**
+- Terreno com relevo (degraus) e um **rio** que nasce no norte e corre até o sul. A água escorre pelo relevo de verdade.
+- **Irrigação:** só a terra perto da água fica verde. Árvores e arbustos só rebrotam em solo irrigado; **fazenda** só pode ser construída (e só rende) em solo irrigado; **poço** só rende com água por perto. Fazenda tem 3 vagas de trabalhadores e poço tem 2.
+- **Seca:** a cada 4 dias de estação temperada vêm 2 dias de seca. O rio seca, a terra amarela e as plantações param. Guarde água e comida antes.
+- **Represa:** construída sobre o rio, sobe o terreno e segura a água a montante, formando um reservatório que irriga uma área maior e aguenta mais a seca.
+- Fome ou sede só deixa o trabalho mais lento; ninguém morre.
+
+---
+
+## Como rodar
 
 Requer Node 20+.
 
@@ -223,4 +241,4 @@ npm run build    # gera a pasta dist/
 
 **Publicar:** suba o repositório no GitHub, importe na Vercel (preset *Vite*; build `npm run build`, saída `dist`) e cada push na `main` publica sozinho.
 
-**Estrutura:** `src/sim` (lógica pura, determinística), `src/chat` (comandos: validação → cooldown → fila → efeito), `src/render` (Canvas, vetor flat), `src/ui` (painel e chat simulado). Atalhos: espaço pausa; 1, 2 e 3 = x1, x2 e x4.
+**Estrutura:** `src/sim` (lógica pura e determinística: relevo, água, aldeões, prédios), `src/chat` (comandos: validação → cooldown → fila → efeito), `src/render` (Canvas isométrico, vetor flat), `src/ui` (painel do streamer e chat simulado).

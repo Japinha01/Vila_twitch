@@ -1,7 +1,7 @@
 export type Resource = 'wood' | 'stone' | 'food' | 'water';
 export type Job = Resource | 'build';
-export type BuildingKind = 'townhall' | 'house' | 'farm' | 'well' | 'sawmill' | 'quarry' | 'warehouse';
-export type NodeKind = 'tree' | 'rock' | 'bush' | 'water';
+export type BuildingKind = 'townhall' | 'house' | 'farm' | 'well' | 'sawmill' | 'quarry' | 'warehouse' | 'dam';
+export type NodeKind = 'tree' | 'rock' | 'bush';
 
 export type Stock = Record<Resource, number>;
 
@@ -10,18 +10,20 @@ export interface ResourceNode {
   kind: NodeKind;
   x: number; // tile
   y: number;
-  amount: number; // Infinity para água
+  amount: number; // árvores e arbustos rebrotam com água; pedras só acabam
 }
 
 export interface Building {
   id: number;
   kind: BuildingKind;
-  x: number; // canto superior esquerdo (tile)
+  x: number; // canto de menor x/y (tile)
   y: number;
-  size: number; // lado em tiles
+  w: number;
+  h: number;
   progress: number; // trabalho acumulado
   workNeeded: number;
   done: boolean;
+  priority: boolean; // obra prioritária: construtores vão primeiro
 }
 
 export type VillagerState = 'idle' | 'toTarget' | 'working' | 'toStore';
@@ -35,7 +37,8 @@ export interface Villager {
   y: number;
   job: Job;
   state: VillagerState;
-  targetId: number | null; // id de nó ou prédio
+  /** id de nó/prédio; negativo = tile de água (-(índice+1)) */
+  targetId: number | null;
   carry: number;
   carryRes: Resource | null;
   workLeft: number;

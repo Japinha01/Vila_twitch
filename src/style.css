@@ -23,3 +23,12 @@ input { min-width: 0; background: #1c262b; color: inherit; border: 1px solid #45
 @media (max-width: 800px) {
   #app { flex-direction: column; } #stage { flex: none; height: 50vh; } #side { width: auto; flex: 1; }
 }
+
+h2 small { font-weight: 400; opacity: .6; }
+#season { font-size: 13px; padding: 5px 8px; border-radius: 6px; background: #1c262b; }
+#season.drought { background: #7a2e0e; color: #ffd8a8; font-weight: 600; }
+#palette button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; }
+#palette button small { font-size: 10px; opacity: .75; }
+#palette button.off { opacity: .45; }
+#hint { font-size: 11px; opacity: .7; line-height: 1.35; }
+#game { cursor: crosshair; touch-action: none; }
