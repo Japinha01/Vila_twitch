@@ -281,7 +281,7 @@ export class Panel {
     seasonEl.className = se.drought ? 'drought' : '';
     seasonEl.textContent = se.drought ? `🔥 SECA · o rio volta em ${days} dia${days > 1 ? 's' : ''}` : `☀ Temperada · seca em ${days} dia${days > 1 ? 's' : ''}`;
     $('clock').textContent = `Dia ${w.day}${w.supportActive ? ' · apoio ✨' : ''}${w.starving ? ' · fome/sede!' : ''}`;
-    $('pop').textContent = `Aldeões ${w.villagers.length}/${w.popCap} · Estoque máx. ${w.storageCap} · Obras ${w.buildings.filter((b) => !b.done).length}`;
+    $('pop').textContent = `Aldeões ${w.villagers.length}/${w.popCap} · Estoque máx. ${w.storageCap} · Obras ${w.buildings.filter((b) => !b.done).length}${w.axes + w.picks > 0 ? ` · 🪓${w.axes} ⛏${w.picks}` : ''}`;
     $('queueinfo').textContent = `Fila do chat: ${this.chat.queued} · descartadas: ${this.chat.dropped}`;
     this.resEl.innerHTML = RESOURCES.map((r) => {
       const pct = Math.min(100, (w.stock[r] / w.storageCap) * 100);

@@ -76,6 +76,11 @@ export const BASE_STORAGE = 100;
 export const WAREHOUSE_STORAGE = 100;
 
 export const SAWMILL_BONUS = 1.5;
+// Ferramentas de pedra: os aldeões fabricam sozinhos; quanto mais gente armada, mais rende a coleta.
+export const AXE_COST: Partial<Record<'wood' | 'stone', number>> = { wood: 4, stone: 2 };
+export const PICK_COST: Partial<Record<'wood' | 'stone', number>> = { wood: 4, stone: 3 };
+export const TOOL_BONUS = 0.6; // +60% com um machado (ou picareta) para cada aldeão
+export const TOOL_RESERVE = { wood: 20, stone: 6 }; // só fabrica se sobrar isto depois
 export const QUARRY_BONUS = 1.5;
 
 export const SUPPORT_BONUS = 1.25;

@@ -1,6 +1,6 @@
 import {
   AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
-  DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, GRID_H,
+  DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
   SUPPORT_BONUS, SUPPORT_MAX_TICKS, SUPPORT_TICKS, TEMPERATE_DAYS, TICKS_PER_DAY, WAREHOUSE_STORAGE,
@@ -40,6 +40,8 @@ export interface SaveData {
   zone?: number[];
   springs?: number[];
   canals?: number;
+  axes?: number;
+  picks?: number;
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
   buildings: Building[];
   nodes: ResourceNode[];
@@ -118,6 +120,8 @@ export class World {
   private roadAnnounced = false;
   private baseSources = 0; // nascentes geradas com o mapa (rio e lagos)
   private springs: number[] = []; // nascentes criadas pelo streamer
+  axes = 0; // machados fabricados (aceleram a lenha)
+  picks = 0; // picaretas fabricadas (aceleram a pedra)
   private canals = 0; // canais cavados pelos aldeões
   private needIrrigation = false; // o planejador não achou terra irrigada para uma fazenda
   private prevDrought = false;
@@ -135,7 +139,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
-      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals,
+      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, axes: this.axes, picks: this.picks,
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -185,6 +189,8 @@ export class World {
     this.springs = [];
     for (const t of data.springs ?? []) this.pushSpring(t);
     this.canals = data.canals ?? 0;
+    this.axes = data.axes ?? 0;
+    this.picks = data.picks ?? 0;
     this.road.fill(0); this.zone.fill(0);
     if (data.road?.length === N) this.road.set(data.road);
     if (data.zone?.length === N) this.zone.set(data.zone);
@@ -1008,6 +1014,8 @@ export class World {
     if (v.workLeft > 0) return;
     const res = v.job as Resource;
     let amt = CARRY_CAPACITY;
+    if (res === 'wood') amt *= 1 + TOOL_BONUS * this.toolCoverage(this.axes);
+    if (res === 'stone') amt *= 1 + TOOL_BONUS * this.toolCoverage(this.picks);
     if (res === 'wood' && this.working('sawmill') > 0) amt *= SAWMILL_BONUS;
     if (res === 'stone' && this.working('quarry') > 0) amt *= QUARRY_BONUS;
     amt = Math.round(amt);
@@ -1215,10 +1223,28 @@ export class World {
 
   // ---------- autonomia ----------
   /** Decisões dos aldeões sem ordem: profissão e casas. Determinístico (sem sorteio). */
+  private toolCoverage(n: number): number { return this.villagers.length ? Math.min(1, n / this.villagers.length) : 0; }
+
+  /** Fabrica um machado ou uma picareta por vez, o que estiver mais atrasado, se o estoque aguentar. */
+  private autoCraft(): void {
+    const pop = this.villagers.length;
+    if (!pop) return;
+    const kind = this.axes <= this.picks ? 'axe' : 'pick';
+    const have = kind === 'axe' ? this.axes : this.picks;
+    if (have >= pop) return;
+    const cost = kind === 'axe' ? AXE_COST : PICK_COST;
+    if (this.stock.wood < (cost.wood ?? 0) + TOOL_RESERVE.wood || this.stock.stone < (cost.stone ?? 0) + TOOL_RESERVE.stone) return;
+    this.stock.wood -= cost.wood ?? 0;
+    this.stock.stone -= cost.stone ?? 0;
+    if (kind === 'axe') this.axes++; else this.picks++;
+    if (have === 0) this.events.push(kind === 'axe' ? '🪓 Os aldeões fabricaram os primeiros machados de pedra.' : '⛏ Os aldeões fabricaram as primeiras picaretas.');
+  }
+
   private autonomyStep(): void {
     for (let i = 0; i < N; i++) if (this.wadeTraffic[i] > 0) this.wadeTraffic[i] *= 0.92; // o trânsito antigo vai sendo esquecido
     this.autoJobs();
     this.autoPlan();
+    this.autoCraft();
     if ((this.tick / AUTONOMY_EVERY) % 5 === 0 && this.needIrrigation) { this.needIrrigation = false; this.autoCanal(); }
     if ((this.tick / AUTONOMY_EVERY) % 3 === 0) { this.autoBridge(); this.autoRoad(); } // procuram mais raramente: é um cálculo maior
   }
