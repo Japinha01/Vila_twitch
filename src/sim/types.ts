@@ -1,6 +1,6 @@
 export type Resource = 'wood' | 'stone' | 'food' | 'water';
 export type Job = Resource | 'build';
-export type BuildingKind = 'townhall' | 'house' | 'farm' | 'well' | 'sawmill' | 'quarry' | 'warehouse' | 'dam';
+export type BuildingKind = 'townhall' | 'house' | 'farm' | 'well' | 'sawmill' | 'quarry' | 'warehouse' | 'dam' | 'bridge';
 export type NodeKind = 'tree' | 'rock' | 'bush';
 
 export type Stock = Record<Resource, number>;

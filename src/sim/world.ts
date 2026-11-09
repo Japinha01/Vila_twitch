@@ -1,5 +1,5 @@
 import {
-  AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, GRID_H,
   GRID_W, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -85,6 +85,12 @@ export class World {
   readonly dam = new Uint8Array(N);
   /** 1 = tile coberto pela zona de irrigação (perto de água) */
   readonly irrigated = new Uint8Array(N);
+  /** 1 = ponte concluída: dá para atravessar a água e o degrau da margem */
+  readonly bridge = new Uint8Array(N);
+  /** altura do tabuleiro onde há ponte */
+  readonly deck = new Float32Array(N);
+  /** passos de aldeões com água até o joelho, por tile (decai com o tempo): mostra onde falta ponte */
+  private wadeTraffic = new Float32Array(N);
 
   private nextId = 1;
   private occ = new Uint8Array(N); // 1 = tile ocupado por nó/prédio
@@ -156,7 +162,8 @@ export class World {
     this.dam.set(data.dam); this.irrigated.set(data.irrigated);
     this.occ.fill(0); this.blocked.fill(0);
     for (const n of this.nodes) this.occ[this.idx(n.x, n.y)] = 1;
-    for (const b of this.buildings) { this.markRect(b.x, b.y, b.w, b.h, 1); this.markRect(b.x, b.y, b.w, b.h, 1, this.blocked); }
+    for (const b of this.buildings) { this.markRect(b.x, b.y, b.w, b.h, 1); if (b.kind !== 'bridge') this.markRect(b.x, b.y, b.w, b.h, 1, this.blocked); }
+    this.rebuildBridges();
     this.wet.length = 0;
     for (let i = 0; i < N; i++) if (this.water[i] >= WET_DEPTH) this.wet.push(i);
     this.events = [];
@@ -200,7 +207,7 @@ export class World {
     const fy = Math.min(GRID_H - 1.001, Math.max(0, y - 0.5));
     const x0 = Math.floor(fx), y0 = Math.floor(fy);
     const tx = fx - x0, ty = fy - y0;
-    const h = (a: number, b: number): number => this.height[this.idx(a, b)];
+    const h = (a: number, b: number): number => { const t = this.idx(a, b); return this.bridge[t] ? this.deck[t] : this.height[t]; };
     return (h(x0, y0) * (1 - tx) + h(x0 + 1, y0) * tx) * (1 - ty) + (h(x0, y0 + 1) * (1 - tx) + h(x0 + 1, y0 + 1) * tx) * ty;
   }
 
@@ -283,7 +290,7 @@ export class World {
     const spec = BUILDINGS[kind];
     for (const r of RESOURCES) this.stock[r] -= spec.cost[r] ?? 0;
     const b = this.placeBuilding(kind, x, y, spec.w, spec.h, spec.work, false);
-    this.evict(b);
+    if (kind !== 'bridge') this.evict(b);
     return { ok: true, building: b };
   }
 
@@ -309,6 +316,7 @@ export class World {
     this.buildings.splice(this.buildings.indexOf(b), 1);
     this.markRect(b.x, b.y, b.w, b.h, 0);
     this.markRect(b.x, b.y, b.w, b.h, 0, this.blocked);
+    if (b.kind === 'bridge') this.rebuildBridges();
     if (b.kind === 'dam') {
       for (let j = 0; j < b.h; j++) for (let i = 0; i < b.w; i++) {
         const t = this.idx(b.x + i, b.y + j);
@@ -361,6 +369,11 @@ export class World {
   step(): void {
     this.tick++;
     if (this.autonomy && this.tick % AUTONOMY_EVERY === 0) this.autonomyStep();
+    for (const v of this.villagers) {
+      if (v.state !== 'toTarget' && v.state !== 'toStore') continue;
+      const t = this.tileOf(v.x, v.y);
+      if (this.water[t] >= WADE_SLOW_DEPTH && !this.bridge[t]) this.wadeTraffic[t]++;
+    }
     const drought = this.season.drought;
     const se = this.season;
     if (!drought && !this.warned && se.daysLeft <= DROUGHT_WARNING_DAYS) {
@@ -460,7 +473,7 @@ export class World {
 
     // 5) alagamento: água alta sobre o prédio o desliga até secar
     for (const b of this.buildings) {
-      if (b.kind === 'townhall' || b.kind === 'dam') continue;
+      if (b.kind === 'townhall' || b.kind === 'dam' || b.kind === 'bridge') continue;
       let deep = 0;
       for (let j = 0; j < b.h; j++) for (let i = 0; i < b.w; i++) deep = Math.max(deep, w[this.idx(b.x + i, b.y + j)]);
       const flooded = deep >= FLOOD_DEPTH;
@@ -494,12 +507,13 @@ export class World {
 
   /** O tile pode ser pisado? (prédio, represa e água funda fecham o caminho) */
   private walkable(t: number): boolean {
-    return !this.blocked[t] && !this.dam[t] && this.water[t] < MAX_WADE;
+    return !this.blocked[t] && !this.dam[t] && (this.water[t] < MAX_WADE || this.bridge[t] === 1);
   }
 
   /** Custo de andar entre tiles vizinhos; Infinity = bloqueado (penhasco, prédio, água funda). */
   private stepCost(from: number, to: number): number {
     if (!this.walkable(to)) return Infinity;
+    if (this.bridge[from] || this.bridge[to]) return 1; // ponte: sem degrau, sem vau
     if (Math.abs(this.height[from] - this.height[to]) > MAX_STEP) return Infinity;
     return this.water[to] >= WADE_SLOW_DEPTH ? 2 : 1;
   }
@@ -661,6 +675,7 @@ export class World {
       }
       this.terrainVersion++;
     }
+    if (b.kind === 'bridge') this.rebuildBridges();
     this.events.push(`${BUILDINGS[b.kind as PlaceableKind].label} concluída!`);
     for (const o of this.villagers) {
       if (o.job === 'build' && o.targetId === b.id) this.resetTask(o);
@@ -721,11 +736,106 @@ export class World {
     return best;
   }
 
+  // ---------- pontes ----------
+  /** Altura do tabuleiro no tile (x, y): a maior das margens da mesma linha. */
+  deckHeight(x: number, y: number): number {
+    let best = -Infinity;
+    for (const dir of [-1, 1]) {
+      for (let k = 1; k <= 8; k++) {
+        const nx = x + dir * k;
+        if (nx < 0 || nx >= GRID_W) break;
+        const t = this.idx(nx, y);
+        if (!this.channel[t]) { best = Math.max(best, this.height[t]); break; }
+      }
+    }
+    return Number.isFinite(best) ? best : this.height[this.idx(x, y)];
+  }
+
+  /** Recalcula as pontes concluídas (depois de carregar um save ou de obra/demolição). */
+  rebuildBridges(): void {
+    this.bridge.fill(0);
+    for (const b of this.buildings) {
+      if (b.kind !== 'bridge' || !b.done) continue;
+      const t = this.idx(b.x, b.y);
+      this.bridge[t] = 1;
+      this.deck[t] = this.deckHeight(b.x, b.y);
+    }
+  }
+
+  /** Tiles que se alcança a pé a partir de `start`, andando de lado (conservador). */
+  private reachableFrom(start: number): Uint8Array {
+    const seen = new Uint8Array(N);
+    const stack = [start];
+    seen[start] = 1;
+    while (stack.length) {
+      const t = stack.pop()!;
+      const x = t % GRID_W, y = (t - x) / GRID_W;
+      for (let k = 0; k < 4; k++) {
+        const nx = x + DX[k], ny = y + DY[k];
+        if (nx < 0 || ny < 0 || nx >= GRID_W || ny >= GRID_H) continue;
+        const u = ny * GRID_W + nx;
+        if (!seen[u] && this.stepCost(t, u) < Infinity) { seen[u] = 1; stack.push(u); }
+      }
+    }
+    return seen;
+  }
+
+  /**
+   * Se há recursos de que a vila precisa do outro lado do rio, os aldeões constroem uma ponte no ponto
+   * mais perto da prefeitura onde o rio é estreito.
+   */
+  private autoBridge(): void {
+    if (this.buildings.some((b) => b.kind === 'bridge' && !b.done)) return;
+    const hall = this.townHall();
+    const near = this.tilesNear(hall.x + hall.w / 2, hall.y + hall.h / 2, hall.w / 2 + 2);
+    if (!near.length) return;
+    const reach = this.reachableFrom(near[0]);
+    const strandedAll = this.nodes.filter((n) => this.nodeHarvestable(n) && !this.tilesNear(n.x + 0.5, n.y + 0.5, 1.4).some((t) => reach[t]));
+    const strandedNodes = strandedAll.length >= AUTO_BRIDGE_MIN_STRANDED ? strandedAll : []; // poucos isolados não valem uma ponte
+    const land = (t: number): boolean => !this.channel[t] && this.walkable(t) && !this.occ[t];
+    const cost = BUILDINGS.bridge.cost.wood ?? 0;
+    type Cand = { y: number; x0: number; x1: number; score: number };
+    let best: Cand | null = null;
+    for (let y = 1; y < GRID_H - 1; y++) {
+      for (let x = 1; x < GRID_W - 1; x++) {
+        if (!this.channel[this.idx(x, y)] || this.channel[this.idx(x - 1, y)]) continue; // começo de um trecho de rio
+        let x1 = x;
+        while (x1 + 1 < GRID_W - 1 && this.channel[this.idx(x1 + 1, y)]) x1++;
+        if (x1 - x + 1 > AUTO_BRIDGE_MAX_SPAN || x1 + 1 >= GRID_W) continue;
+        const L = this.idx(x - 1, y), R = this.idx(x1 + 1, y);
+        if (!land(L) || !land(R)) continue;
+        const tiles: number[] = [];
+        for (let i = x; i <= x1; i++) tiles.push(this.idx(i, y));
+        if (!tiles.every((t) => this.spotOk('bridge', t % GRID_W, y))) continue;
+        if (this.buildings.some((o) => o.kind === 'bridge' && Math.abs(o.y - y) < 3)) continue; // já há travessia por perto
+        // por que ali? (1) o rio fecha o caminho até recursos úteis; (2) aldeões vivem atravessando a vau
+        let score = 0;
+        if (reach[L] !== reach[R]) {
+          const far = reach[L] ? R : L;
+          const fx = far % GRID_W, fy = (far - fx) / GRID_W;
+          if (strandedNodes.some((n) => (n.x - fx) ** 2 + (n.y - fy) ** 2 <= 100)) score += 1000;
+        }
+        const traffic = tiles.reduce((a, t) => a + this.wadeTraffic[t], 0);
+        if (traffic >= AUTO_BRIDGE_WADE_MIN) score += traffic;
+        if (score <= 0) continue;
+        score -= Math.abs(y - hall.y) * 0.01; // desempate: perto da prefeitura
+        if (!best || score > best.score) best = { y, x0: x, x1, score };
+      }
+    }
+    if (!best) return;
+    const n = best.x1 - best.x0 + 1;
+    if (this.stock.wood < cost * n + AUTO_HOUSE_RESERVE) return;
+    for (let i = best.x0; i <= best.x1; i++) this.requestBuild('bridge', i, best.y);
+    this.events.push('🌉 Os aldeões decidiram construir uma ponte: viviam atravessando o rio.');
+  }
+
   // ---------- autonomia ----------
   /** Decisões dos aldeões sem ordem: profissão e casas. Determinístico (sem sorteio). */
   private autonomyStep(): void {
+    for (let i = 0; i < N; i++) if (this.wadeTraffic[i] > 0) this.wadeTraffic[i] *= 0.92; // o trânsito antigo vai sendo esquecido
     this.autoJobs();
     this.autoHouse();
+    if ((this.tick / AUTONOMY_EVERY) % 3 === 0) this.autoBridge(); // procura mais raramente: é um cálculo maior
   }
 
   private autoJobs(): void {
@@ -801,7 +911,7 @@ export class World {
       for (let i = 0; i < w; i++) {
         const t = this.idx(x + i, y + j);
         if (this.occ[t] || this.dam[t]) return false;
-        if (kind === 'dam') { if (!this.channel[t]) return false; continue; }
+        if (kind === 'dam' || kind === 'bridge') { if (!this.channel[t]) return false; continue; }
         if (this.channel[t] || this.water[t] > 0.05 || this.height[t] !== h0) return false;
       }
     }
@@ -818,7 +928,7 @@ export class World {
     const b: Building = { id: this.nextId++, kind, x, y, w, h, progress: done ? work : 0, workNeeded: work, done, priority: false, flooded: false };
     this.buildings.push(b);
     this.markRect(x, y, w, h, 1);
-    this.markRect(x, y, w, h, 1, this.blocked);
+    if (kind !== 'bridge') this.markRect(x, y, w, h, 1, this.blocked); // ponte não fecha o caminho
     return b;
   }
 

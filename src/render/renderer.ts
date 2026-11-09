@@ -232,7 +232,7 @@ export class Renderer implements GameView {
 
   private drawBuilding(b: Building): void {
     const { ctx, world: wd } = this;
-    const z0 = wd.height[wd.idx(b.x, b.y)];
+    const z0 = b.kind === 'bridge' ? wd.deckHeight(b.x, b.y) : wd.height[wd.idx(b.x, b.y)];
     const { x, y, w, h } = b;
     ctx.save();
     if (!b.done) ctx.globalAlpha = 0.45 + 0.4 * (b.progress / b.workNeeded);
@@ -280,6 +280,9 @@ export class Renderer implements GameView {
       }
       case 'dam':
         this.box(x, y, w, h, z0, 1.2, '#adb5bd', '#868e96', '#6c757d');
+        break;
+      case 'bridge':
+        this.box(x, y, w, h, z0, 0.12, '#d6a76a', '#b98b53', '#9d733f');
         break;
     }
     ctx.restore();
