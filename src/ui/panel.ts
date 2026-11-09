@@ -2,7 +2,7 @@ import { CommandProcessor } from '../chat/commands';
 import { BUILDINGS, RESOURCE_LABEL } from '../sim/config';
 import { RESOURCES, type Resource } from '../sim/types';
 import type { PlaceableKind, World } from '../sim/world';
-import type { Renderer } from '../render/renderer';
+import type { GameView } from '../render/view';
 import { describeTile, JOB_LABEL } from './info';
 
 const ICON: Record<Resource, string> = { wood: '🪵', stone: '🪨', food: '🍎', water: '💧' };
@@ -31,7 +31,7 @@ export class Panel {
   private lastPeople = 0;
   private selected: number | null = null;
 
-  constructor(private world: World, private chat: CommandProcessor, private view: Renderer) {
+  constructor(private world: World, private chat: CommandProcessor, private view: GameView) {
     chat.onReply = (to, t) => this.addLog(`@${to} ${t}`, 'bot');
     this.initSpeed();
     this.initPalette();
@@ -52,6 +52,8 @@ export class Panel {
       if (e.key === '2') this.setSpeed(2);
       if (e.key === '3') this.setSpeed(4);
       if (e.key === 'Escape') this.setTool({ type: 'none' });
+      if (e.key === 'q' || e.key === 'Q') this.view.rotateBy?.(-130);
+      if (e.key === 'e' || e.key === 'E') this.view.rotateBy?.(130);
     });
   }
 
@@ -105,7 +107,8 @@ export class Panel {
         const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
         drag.moved += Math.abs(dx) + Math.abs(dy);
         drag.x = e.clientX; drag.y = e.clientY;
-        if (drag.moved > 6) this.view.panBy(dx, dy);
+        if (e.buttons & 4 && this.view.rotateBy) this.view.rotateBy(dx); // botão do meio gira (só no 3D)
+        else if (drag.moved > 6) this.view.panBy(dx, dy);
       }
       const tile = this.view.pickTile(p.x, p.y);
       this.hover(tile);

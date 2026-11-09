@@ -1,14 +1,14 @@
 import { GRID_H, GRID_W, MIN_HARVEST, NODE_MAX } from '../sim/config';
 import type { Building, ResourceNode, Resource, Villager } from '../sim/types';
-import type { PlaceableKind, World } from '../sim/world';
+import type { World } from '../sim/world';
 import { BUILDINGS } from '../sim/config';
+import type { GameView, Ghost } from './view';
 
 /** Projeção isométrica: tile (x, y, z) → tela. */
 const TW = 64; // largura do losango do tile (px a escala 1)
 const TH = 32;
 const ZH = 14; // pixels por degrau de altura
 
-export interface Ghost { kind: PlaceableKind; x: number; y: number; ok: boolean }
 
 type RGB = [number, number, number];
 const rgb = (hex: string): RGB => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
@@ -21,7 +21,7 @@ const RES_COLOR: Record<Resource, string> = { wood: '#a9743d', stone: '#868e96',
 
 interface Drawable { key: number; draw: () => void }
 
-export class Renderer {
+export class Renderer implements GameView {
   private ctx: CanvasRenderingContext2D;
   private s = 1; // escala (zoom) em px de dispositivo
   private fitScale = 1;
