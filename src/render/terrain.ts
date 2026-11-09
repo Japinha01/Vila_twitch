@@ -10,6 +10,8 @@ type RGB = [number, number, number];
 // o Three.js trata cor de vértice como linear: converte do sRGB da paleta, senão tudo sai lavado
 const lin = (v: number): number => Math.pow(v / 255, 2.2);
 const hex = (h: string): RGB => [lin(parseInt(h.slice(1, 3), 16)), lin(parseInt(h.slice(3, 5), 16)), lin(parseInt(h.slice(5, 7), 16))];
+// matiz por bioma (campo, floresta, terra pedregosa)
+const TINT: RGB[] = [[1, 1, 1], [0.82, 0.93, 0.8], [1.08, 0.97, 0.88]];
 const GRASS = hex('#76c957'), DRY = hex('#c9b360'), STONE = hex('#adb5bd'), SOIL = hex('#8f5f33');
 
 export interface TerrainData {
@@ -70,10 +72,11 @@ export function paintTops(w: World, colors: Float32Array): void {
     else {
       const t = 0.4 + 0.6 * w.moisture[i];
       const lift = 1 + (w.height[i] - 3) * 0.03;
+      const tint = TINT[w.biome[i]] ?? TINT[0];
       c = [
-        (DRY[0] + (GRASS[0] - DRY[0]) * t) * lift,
-        (DRY[1] + (GRASS[1] - DRY[1]) * t) * lift,
-        (DRY[2] + (GRASS[2] - DRY[2]) * t) * lift,
+        (DRY[0] + (GRASS[0] - DRY[0]) * t) * lift * tint[0],
+        (DRY[1] + (GRASS[1] - DRY[1]) * t) * lift * tint[1],
+        (DRY[2] + (GRASS[2] - DRY[2]) * t) * lift * tint[2],
       ];
     }
     for (let k = 0; k < 4; k++) {

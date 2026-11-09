@@ -46,6 +46,8 @@ export interface SaveData {
   irrigated: number[];
 }
 
+export const BIOME_MEADOW = 0, BIOME_FOREST = 1, BIOME_ROCKY = 2;
+const LAKE_RATE_PER_TILE = 0.0015;
 const N = GRID_W * GRID_H;
 const MIN_W = 0.003;
 const DX = [-1, 1, 0, 0];
@@ -99,6 +101,8 @@ export class World {
   private blocked = new Uint8Array(N); // 1 = tile coberto por prédio (aldeão não atravessa)
   private downstream = new Int32Array(N).fill(-1);
   private sources: number[] = [];
+  private sourceRates: number[] = [];
+  readonly biome = new Uint8Array(N); // BIOME_*, vem da seed (não entra no save)
   private wet: number[] = [];
   private delta = new Float32Array(N);
   private flows = new Float32Array(4);
@@ -428,7 +432,7 @@ export class World {
   // ---------- água ----------
   private flowStep(sourcesOn: boolean): void {
     const w = this.water, h = this.height, d = this.delta, f = this.flows;
-    if (sourcesOn) for (const s of this.sources) w[s] += SOURCE_RATE;
+    if (sourcesOn) for (let k = 0; k < this.sources.length; k++) w[this.sources[k]] += this.sourceRates[k];
 
     // 1) escorrimento: cada tile entrega parte da diferença de nível aos vizinhos mais baixos
     d.fill(0);
@@ -1029,7 +1033,19 @@ export class World {
       return (c(x0, y0) * (1 - tx) + c(x0 + 1, y0) * tx) * (1 - ty) + (c(x0, y0 + 1) * (1 - tx) + c(x0 + 1, y0 + 1) * tx) * ty;
     };
 
-    for (let y = 0; y < GRID_H; y++) this.rx[y] = 27 + Math.round(Math.sin(y * 0.33 + phase) * 3);
+    // o rio muda de mapa para mapa: posição, curvas mais ou menos fortes
+    const riverBase = 27 + Math.floor(this.rng() * 4), riverAmp = 2 + this.rng() * 2.2, riverFreq = 0.24 + this.rng() * 0.22;
+    for (let y = 0; y < GRID_H; y++) this.rx[y] = riverBase + Math.round(Math.sin(y * riverFreq + phase) * riverAmp);
+    // biomas: campo de fertilidade suave (floresta onde alto, terra pedregosa onde baixo)
+    const bw = 7, bh = 6;
+    const bcoarse = Array.from({ length: bw * bh }, () => this.rng());
+    const bnoise = (x: number, y: number): number => {
+      const fx = (x / (GRID_W - 1)) * (bw - 1), fy = (y / (GRID_H - 1)) * (bh - 1);
+      const x0 = Math.min(bw - 2, Math.floor(fx)), y0 = Math.min(bh - 2, Math.floor(fy));
+      const tx = fx - x0, ty = fy - y0;
+      const c = (a: number, b: number): number => bcoarse[b * bw + a];
+      return (c(x0, y0) * (1 - tx) + c(x0 + 1, y0) * tx) * (1 - ty) + (c(x0, y0 + 1) * (1 - tx) + c(x0 + 1, y0 + 1) * tx) * ty;
+    };
 
     for (let y = 0; y < GRID_H; y++) {
       for (let x = 0; x < GRID_W; x++) {
@@ -1054,29 +1070,90 @@ export class World {
       }
     }
     this.sources = [this.idx(this.rx[0], 0), this.idx(this.rx[0] + 1, 0)];
+    this.sourceRates = [SOURCE_RATE, SOURCE_RATE];
+    this.carveLakes(hx + 1, hy + 1);
+    for (let y = 0; y < GRID_H; y++) {
+      for (let x = 0; x < GRID_W; x++) {
+        const b = bnoise(x, y);
+        this.biome[this.idx(x, y)] = b > 0.6 ? BIOME_FOREST : b < 0.3 ? BIOME_ROCKY : BIOME_MEADOW;
+      }
+    }
 
     this.placeBuilding('townhall', hx, hy, 3, 3, 0, true);
 
     for (let s = 0; s < 160; s++) this.flowStep(true); // assenta o rio
     for (let i = 0; i < N; i++) this.moisture[i] = this.irrigated[i];
 
+    // cada bioma favorece um recurso: floresta, árvores; terra pedregosa, pedras; campo, arbustos
+    const likes: Record<NodeKind, [number, number, number]> = { tree: [0.45, 1, 0.12], rock: [0.3, 0.12, 1], bush: [1, 0.35, 0.2] }; // [campo, floresta, pedregosa]
     const scatter = (kind: NodeKind, count: number, minDist: number, needWater: boolean): void => {
       let tries = 0;
-      while (count > 0 && tries++ < 4000) {
+      while (count > 0 && tries++ < 6000) {
         const x = 1 + Math.floor(this.rng() * (GRID_W - 2));
         const y = 1 + Math.floor(this.rng() * (GRID_H - 2));
         const i = this.idx(x, y);
         if (this.occ[i] || this.channel[i] || this.water[i] > 0.02) continue;
         if (Math.hypot(x - hx - 1, y - hy - 1) < minDist) continue;
         if (needWater && !this.irrigated[i]) continue;
+        if (this.rng() > likes[kind][this.biome[i]]) continue;
         this.nodes.push({ id: this.nextId++, kind, x, y, amount: NODE_MAX[kind] });
         this.occ[i] = 1;
         count--;
       }
     };
-    scatter('tree', 55, 4, true);
-    scatter('bush', 14, 4, true);
-    scatter('rock', 18, 6, false);
+    scatter('tree', 50 + Math.floor(this.rng() * 24), 4, true);
+    scatter('bush', 12 + Math.floor(this.rng() * 8), 4, true);
+    scatter('rock', 16 + Math.floor(this.rng() * 12), 6, false);
+  }
+
+  /** Lagos de formas e tamanhos variados, cada um com sua nascente; nunca perto da vila, do rio ou de degraus. */
+  private carveLakes(cx0: number, cy0: number): void {
+    const count = 1 + Math.floor(this.rng() * 3) + (this.rng() < 0.3 ? 1 : 0); // 1 a 4 lagos
+    const placed: Array<{ x: number; y: number; r: number }> = [];
+    for (let n = 0; n < count; n++) {
+      for (let attempt = 0; attempt < 120; attempt++) {
+        const r = 2.2 + this.rng() * 2.3, aspect = 0.6 + this.rng() * 1.0, rot = this.rng() * Math.PI;
+        const wob = [this.rng() * 6.28, this.rng() * 6.28, 0.12 + this.rng() * 0.2];
+        const x = Math.floor(3 + this.rng() * (GRID_W - 6)), y = Math.floor(3 + this.rng() * (GRID_H - 6));
+        if (Math.hypot(x - cx0, y - cy0) < r * 1.6 + 7) continue;
+        if (placed.some((p) => Math.hypot(p.x - x, p.y - y) < p.r * 1.6 + r * 1.6 + 3)) continue;
+        // forma: elipse girada com a borda ondulada
+        const tiles: number[] = [];
+        const reach = Math.ceil(r * 1.7) + 1;
+        for (let j = y - reach; j <= y + reach; j++) {
+          for (let i = x - reach; i <= x + reach; i++) {
+            if (i < 2 || j < 2 || i >= GRID_W - 2 || j >= GRID_H - 2) continue;
+            const dx = i - x, dy = j - y;
+            const u = dx * Math.cos(rot) + dy * Math.sin(rot), v = (-dx * Math.sin(rot) + dy * Math.cos(rot)) / aspect;
+            const ang = Math.atan2(v, u);
+            const edge = r * (1 + wob[2] * Math.sin(ang * 3 + wob[0]) + wob[2] * 0.6 * Math.sin(ang * 5 + wob[1]));
+            if (Math.hypot(u, v) <= edge) tiles.push(this.idx(i, j));
+          }
+        }
+        if (tiles.length < 6) continue;
+        const ring = new Set<number>(tiles);
+        for (const t of tiles) {
+          const tx = t % GRID_W, ty = (t - tx) / GRID_W;
+          for (let k = 0; k < 4; k++) ring.add(this.idx(Math.max(0, Math.min(GRID_W - 1, tx + DX[k])), Math.max(0, Math.min(GRID_H - 1, ty + DY[k]))));
+        }
+        let lo = Infinity, hi = -Infinity, bad = false;
+        for (const t of ring) {
+          if (this.channel[t] || this.occ[t]) { bad = true; break; }
+          const tx = t % GRID_W;
+          if (Math.abs(tx - this.rx[(t - tx) / GRID_W]) < 4) { bad = true; break; } // longe do leito do rio
+          lo = Math.min(lo, this.height[t]); hi = Math.max(hi, this.height[t]);
+        }
+        if (bad || hi - lo > 0 || lo < 1) continue; // só em terreno plano (sem degrau no meio)
+        for (const t of tiles) { this.height[t] = lo - 1; this.water[t] = 0.9; }
+        // nascente no tile mais central; vazão proporcional à área, para o lago encher sem transbordar demais
+        let c = tiles[0], cd = Infinity;
+        for (const t of tiles) { const tx = t % GRID_W, ty = (t - tx) / GRID_W; const d = (tx - x) ** 2 + (ty - y) ** 2; if (d < cd) { cd = d; c = t; } }
+        this.sources.push(c);
+        this.sourceRates.push(tiles.length * LAKE_RATE_PER_TILE);
+        placed.push({ x, y, r });
+        break;
+      }
+    }
   }
 
   /** Cor estável por viewer, usada quando não há cor da Twitch. */
