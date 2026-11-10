@@ -7,6 +7,7 @@ import { BUILDINGS, GRID_H, GRID_W } from '../sim/config';
 import type { World } from '../sim/world';
 import { makeBuilding } from './models';
 import { EventFx } from './eventfx';
+import { NightFx } from './night';
 import { SceneSync } from './scenesync';
 import { PostFx } from './post';
 import { buildTerrain, fillWater, HS, paintTops, waterIndices } from './terrain';
@@ -83,6 +84,7 @@ export class Renderer3D implements GameView {
     this.rebuildTerrain();
     this.sync = new SceneSync(this.scene, world);
     this.fx = new EventFx(this.scene, world);
+    this.nightFx = new NightFx(this.scene, world);
     for (let i = 0; i < 6; i++) {
       const m = new Mesh(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new MeshBasicMaterial({ transparent: true, opacity: 0.5, side: DoubleSide, depthWrite: false }));
       m.visible = false;
@@ -136,6 +138,7 @@ export class Renderer3D implements GameView {
   /** Qualidade gráfica: 0 baixa (sem sombras, resolução 1×), 1 média (sombras leves), 2 alta. */
   quality = 2;
   private post: PostFx | null = null;
+  private nightFx: NightFx;
   private transparent = false;
   setQuality(q: number): void {
     this.quality = Math.max(0, Math.min(2, Math.round(q)));
@@ -276,6 +279,8 @@ export class Renderer3D implements GameView {
     (this.water.geometry.getAttribute('color') as BufferAttribute).needsUpdate = true;
 
     this.updateMood();
+    this.nightFx.applyLight(this.sun, this.hemi, this.scene.background as Color | null, this.scene.fog ? this.scene.fog.color : null);
+    this.nightFx.update(now);
     this.fx.update(now, this.target);
     this.fx.applyLight(this.sun, this.hemi, this.scene.background as Color | null);
     this.updateSpriteTint();
