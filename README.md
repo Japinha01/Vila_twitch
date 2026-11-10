@@ -259,7 +259,7 @@ npm run build    # gera a pasta dist/
 
 Com isso aparece a seção "Nuvem" no painel. A vila é salva sozinha a cada 60 s; viewers que voltam numa vila nova recuperam XP e função (só os do chat real, identificados pelo ID da Twitch).
 
-**Overlay para o OBS (M3):** precisa da nuvem configurada (variáveis do Supabase; o login não é necessário). No painel, em "Overlay para o OBS", clique em Ativar overlay e copie o link. No OBS: Fontes > + > Navegador, cole o link, largura 1920 e altura 1080 (o fundo é transparente). Mantenha a aba do jogo aberta durante a live: é ela que roda a vila e transmite para o overlay, só enquanto houver um overlay aberto. O link é secreto (192 bits aleatórios); "Gerar novo link" invalida o antigo. Opções no link: `&fundo=1` (fundo sólido) e `&2d` (visual 2D). O jogo não precisa de nenhuma configuração extra no Supabase (usa canais públicos de Realtime, só o link secreto dá acesso).
+**Overlay para o OBS (M3):** precisa da nuvem configurada (variáveis do Supabase; o login não é necessário). No painel, em "Overlay para o OBS", clique em Ativar overlay e copie o link. No OBS: Fontes > + > Navegador, cole o link, largura 1920 e altura 1080 (o fundo é escuro; para transparente use `&transparente=1`). Mantenha a aba do jogo aberta durante a live: é ela que roda a vila e transmite para o overlay, só enquanto houver um overlay aberto. O link é secreto (192 bits aleatórios); "Gerar novo link" invalida o antigo. Opções no link: `&transparente=1` (fundo transparente) e `&2d` (visual 2D). O jogo não precisa de nenhuma configuração extra no Supabase (usa canais públicos de Realtime, só o link secreto dá acesso).
 
 O overlay acompanha a **câmera do jogo** (zoom, giro e deslocamento) e mostra o **status da vila** (dia, estação, recursos, população) e os **nomes dos aldeões**; no painel você liga ou desliga os nomes e o status. Só dados públicos da live são transmitidos: informação secreta (como os objetivos da Guerra) nunca vai para o overlay.
 
@@ -321,3 +321,8 @@ Prédio alagado: após 2 rodadas de autonomia (~20 s) os aldeões cavam um canal
 
 ## Carga sem destino
 Aldeão com carga que não acha caminho até um depósito tenta mais 4 vezes e então **desiste**: larga a carga e volta a procurar trabalho. Quem sobra com carga de outra função (trocou de profissão no caminho) vai guardá-la antes de procurar trabalho. Com muita gente sem trabalho e estoque cheio, o planejador constrói mais armazéns (1 extra a cada 10 aldeões parados).
+
+## Sem trabalho, rotas e overlay
+- **Estoque cheio:** quem estaria parado larga a carga que não tem onde guardar e ajuda nas obras abertas (até 3 ajudantes por obra); a profissão automática ignora recurso com estoque cheio.
+- **Rotas espalhadas:** cada aldeão no tile soma um custo extra de rota (0,5, até 4), então os caminhos se espalham em vez de formar fila indiana.
+- **Overlay:** o fundo agora é escuro por padrão; `&transparente=1` no link volta ao fundo transparente.
