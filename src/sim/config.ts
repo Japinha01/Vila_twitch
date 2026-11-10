@@ -130,3 +130,8 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
 };
 
 export const WAITLIST_MAX = 200; // fila de espera: quantos viewers cabem
+
+// Minas de pedra: só nelas se constrói pedreira (e nada mais)
+export const MINE_VEINS = 3; // jazidas por mapa de tamanho base (cresce com a raiz da escala do mapa)
+export const MINE_MIN_DIST = 11; // longe da fogueira
+export const QUARRY_MAX_DIST = 45; // até onde a vila procura mina para a pedreira

@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, WAITLIST_MAX, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -16,7 +16,7 @@ import {
 
 export type AddResult = { ok: true; villager: Villager } | { ok: false; reason: 'exists' | 'full' };
 export type QueueResult = { ok: true; position: number; already: boolean } | { ok: false; reason: 'off' | 'full' };
-export type PlaceCheck = { ok: true } | { ok: false; reason: 'cost' | 'space'; missing?: Partial<Stock> };
+export type PlaceCheck = { ok: true } | { ok: false; reason: 'cost' | 'space' | 'mine'; missing?: Partial<Stock> };
 export type BuildResult = { ok: true; building: Building } | Exclude<PlaceCheck, { ok: true }>;
 export type PlaceableKind = Exclude<BuildingKind, 'townhall'>;
 export interface Season { drought: boolean; daysLeft: number }
@@ -42,6 +42,7 @@ export interface SaveData {
   springs?: number[];
   canals?: number;
   axes?: number;
+  mine?: number[];
   waitlistOn?: boolean;
   waitlist?: { userId: string; name: string; color: string }[];
   picks?: number;
@@ -100,6 +101,7 @@ export class World {
   readonly irrigated = new Uint8Array(N);
   /** 1 = ponte concluída: dá para atravessar a água e o degrau da margem */
   readonly bridge = new Uint8Array(N);
+  readonly mine = new Uint8Array(N); // 1 = jazida de pedra: só a pedreira se constrói aqui
   readonly forest = new Uint8Array(N); // 1 = tile com árvore (conta como ocupado, mas dá para limpar)
   readonly road = new Uint8Array(N); // 1 = estrada (não fecha o caminho, anda-se mais rápido)
   readonly zone = new Uint8Array(N); // ZoneKind pintada pelo streamer
@@ -144,7 +146,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
-      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, axes: this.axes, picks: this.picks, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
+      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -196,6 +198,7 @@ export class World {
     this.canals = data.canals ?? 0;
     this.waitlistOn = data.waitlistOn ?? true;
     this.waitlist = (data.waitlist ?? []).map((q) => ({ ...q }));
+    if (data.mine) this.mine.set(data.mine); else this.placeMines(); // save antigo: jazidas sorteadas da seed, sem mexer na vila
     this.axes = data.axes ?? 0;
     this.picks = data.picks ?? 0;
     this.road.fill(0); this.zone.fill(0);
@@ -633,7 +636,7 @@ export class World {
   /** Valida a posição e o custo; usada pela prévia (fantasma) do painel. */
   canPlace(kind: PlaceableKind, x: number, y: number): PlaceCheck {
     const spec = BUILDINGS[kind];
-    if (!this.spotOk(kind, x, y)) return { ok: false, reason: 'space' };
+    if (!this.spotOk(kind, x, y)) return { ok: false, reason: kind === 'quarry' && !this.mineUnder(x, y, spec.w, spec.h) ? 'mine' : 'space' };
     const missing: Partial<Stock> = {};
     for (const r of RESOURCES) {
       const need = spec.cost[r] ?? 0;
@@ -1318,7 +1321,7 @@ export class World {
     const hall = this.townHall();
     const cx = hall.x + hall.w / 2, cy = hall.y + hall.h / 2;
     const { w, h } = BUILDINGS[kind];
-    const maxD = kind === 'farm' || kind === 'well' ? 22 : AUTO_BUILD_MAX_DIST;
+    const maxD = kind === 'quarry' ? QUARRY_MAX_DIST : kind === 'farm' || kind === 'well' ? 22 : AUTO_BUILD_MAX_DIST;
     const rocks = kind === 'quarry' ? this.nodes.filter((n) => n.kind === 'rock' && this.nodeHarvestable(n)) : [];
     let best: { x: number; y: number } | null = null;
     let bs = Infinity;
@@ -1374,7 +1377,7 @@ export class World {
     for (const n of needs) {
       let site = this.findSite(n.kind);
       if (!site && n.kind === 'farm') this.needIrrigation = true; // sem terra irrigada livre: cavam um canal
-      if (!site && !(this.zoneFor(n.kind) && this.hasZone(this.zoneFor(n.kind))) && n.kind !== 'farm' && n.kind !== 'well') {
+      if (!site && !(this.zoneFor(n.kind) && this.hasZone(this.zoneFor(n.kind))) && n.kind !== 'farm' && n.kind !== 'well' && n.kind !== 'quarry') {
         site = this.autoLevel(n.kind); // sem lugar plano: aplainam um terreno
         if (site) { this.events.push(`⛏ Os aldeões aplainaram um terreno para ${n.art} ${n.name}.`); return; } // constroem na próxima rodada
       }
@@ -1421,8 +1424,14 @@ export class World {
         const t = this.idx(x + i, y + j);
         if ((this.occ[t] && !this.forest[t]) || this.dam[t] || this.road[t]) return false; // árvore não impede: a obra limpa o terreno
         if (kind === 'dam' || kind === 'bridge') { if (!this.channel[t]) return false; continue; }
+        if (kind !== 'quarry' && this.mine[t]) return false; // a jazida é reservada para a pedreira
         if (this.channel[t] || this.water[t] > 0.05 || this.height[t] !== h0) return false;
       }
+    }
+    if (kind === 'quarry') {
+      let onMine = 0;
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (this.mine[this.idx(x + i, y + j)]) onMine++;
+      if (onMine < 2) return false; // pedreira só em mina de pedra
     }
     if (kind === 'dam') {
       // uma represa por trecho: sem outra a menos de 3 linhas
@@ -1566,6 +1575,49 @@ export class World {
     }
     scatter('bush', Math.round((12 + Math.floor(this.rng() * 8)) * MAP_SCALE), 4, true);
     scatter('rock', Math.round((16 + Math.floor(this.rng() * 12)) * MAP_SCALE), 6, false);
+    this.placeMines();
+  }
+
+  /** Jazidas de pedra: manchas de terra firme longe da vila e da água, de preferência em terreno pedregoso. Usa um sorteio próprio (a seed do mapa não muda). */
+  private placeMines(): void {
+    const rng = mulberry32((this.seed ^ 0x6d696e65) >>> 0);
+    const hall = this.townHall();
+    const cx = hall.x + hall.w / 2, cy = hall.y + hall.h / 2;
+    const want = Math.max(2, Math.round(MINE_VEINS * Math.sqrt(MAP_SCALE)));
+    const centers: Array<{ x: number; y: number }> = [];
+    for (let tries = 0; centers.length < want && tries < 4000; tries++) {
+      const x = 4 + Math.floor(rng() * (GRID_W - 8)), y = 4 + Math.floor(rng() * (GRID_H - 8));
+      const i = this.idx(x, y);
+      if (Math.hypot(x - cx, y - cy) < MINE_MIN_DIST || centers.some((c) => Math.hypot(c.x - x, c.y - y) < 12)) continue;
+      if (this.water[i] > 0.02 || this.channel[i]) continue;
+      if (this.biome[i] !== BIOME_ROCKY && rng() > 0.25) continue; // quase sempre em terra pedregosa
+      centers.push({ x, y });
+    }
+    for (const c of centers) {
+      const r = 2.1 + rng() * 0.9;
+      for (let y = Math.floor(c.y - r - 1); y <= Math.ceil(c.y + r + 1); y++) {
+        for (let x = Math.floor(c.x - r - 1); x <= Math.ceil(c.x + r + 1); x++) {
+          if (x < 1 || y < 1 || x >= GRID_W - 1 || y >= GRID_H - 1) continue;
+          const i = this.idx(x, y);
+          if (Math.hypot(x - c.x, y - c.y) > r * (0.85 + 0.3 * rng()) || this.water[i] > 0.02 || this.channel[i] || this.dam[i]) continue;
+          this.mine[i] = 1;
+        }
+      }
+    }
+  }
+
+  private mineUnder(x: number, y: number, w: number, h: number): boolean {
+    let n = 0;
+    if (!this.inBounds(x, y, w, h)) return false;
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (this.mine[this.idx(x + i, y + j)]) n++;
+    return n >= 2;
+  }
+
+  /** Tiles de jazida (para o visual). */
+  mineTiles(): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < N; i++) if (this.mine[i]) out.push(i);
+    return out;
   }
 
   /** Lagos de formas e tamanhos variados, cada um com sua nascente; nunca perto da vila, do rio ou de degraus. */

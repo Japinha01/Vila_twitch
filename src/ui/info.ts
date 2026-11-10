@@ -44,6 +44,7 @@ export function describeTile(w: World, x: number, y: number): string[] {
   const depth = w.water[i];
   if (depth >= 0.04) out.push(`💧 Água, profundidade ${depth.toFixed(1)}`);
   if (w.dam[i]) out.push('🧱 Represa');
+  if (w.mine[i]) out.push('⛰ Mina de pedra · só pedreiras');
   out.push(`${w.irrigated[i] ? '🌿 Solo irrigado' : '🏜 Solo seco'} · altura ${w.height[i]}`);
   return out;
 }

@@ -244,6 +244,7 @@ export class Panel {
       const label = BUILDINGS[kind].label;
       const r = w.requestBuild(kind, t.x, t.y);
       if (r.ok) this.addLog(`🏗 ${label} marcada! Construtores (!trabalhar construir) fazem a obra.`, 'ev');
+      else if (r.reason === 'mine') this.addLog(`${label} só pode ser construída numa mina de pedra (as manchas cinzentas no mapa).`, 'ev');
       else if (r.reason === 'cost') this.addLog(`Faltam recursos para ${label}: ${Object.entries(r.missing ?? {}).map(([k, n]) => `${n} ${RESOURCE_LABEL[k as Resource]}`).join(', ')}.`, 'ev');
       else this.addLog(`Não dá para construir ${label} aí${kind === 'farm' ? ' (precisa de solo irrigado)' : kind === 'well' ? ' (precisa de água perto)' : kind === 'dam' ? ' (só sobre o rio)' : ''}.`, 'ev');
       return;
