@@ -110,3 +110,9 @@ h2.sub { margin: 10px 0 6px; font-size: 13px; }
 .conta-sw i { width: 20px; height: 20px; border-radius: 50%; display: inline-block; border: 1px solid #0006; }
 .conta-sw small { font-size: 11px; line-height: 1.1; text-align: left; }
 .conta-main { padding: 8px 18px; font-size: 15px; background: #f08c00; color: #fff; border: 0; border-radius: 8px; cursor: pointer; margin-top: 14px; }
+
+#contapop { position: fixed; left: 50%; top: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 14px 22px; border-radius: 14px; background: #1f3a2a; border: 2px solid #51cf66; color: #fff; font-size: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.45); z-index: 50; animation: contaPop 4.2s ease-out forwards; max-width: 90vw; }
+#contapop span { font-size: 26px; color: #51cf66; }
+#contapop.erro { background: #3a1f1f; border-color: #ff6b6b; }
+#contapop.erro span { color: #ff6b6b; }
+@keyframes contaPop { 0% { opacity: 0; transform: translate(-50%, -16px) scale(.96); } 7% { opacity: 1; transform: translate(-50%, 0) scale(1); } 88% { opacity: 1; } 100% { opacity: 0; } }

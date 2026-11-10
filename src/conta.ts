@@ -29,6 +29,18 @@ function drawAvatar(ctx: CanvasRenderingContext2D, look: Look, id: string): void
   }
 }
 
+/** Popup que some sozinho: confirma o salvamento (ou mostra o erro) sem o viewer ter que procurar o aviso na página. */
+function popup(text: string, ok: boolean): void {
+  document.getElementById('contapop')?.remove();
+  const el = document.createElement('div');
+  el.id = 'contapop';
+  el.className = ok ? 'ok' : 'erro';
+  el.setAttribute('role', 'status');
+  el.innerHTML = `<span>${ok ? '✔' : '⚠'}</span><div>${esc(text)}</div>`;
+  document.body.appendChild(el);
+  window.setTimeout(() => el.remove(), 4200);
+}
+
 /** Página `?conta`: o viewer entra com a Twitch e monta o visual, que vale em qualquer vila onde ele jogar. */
 export async function runConta(): Promise<void> {
   const app = document.getElementById('app')!;
@@ -96,8 +108,15 @@ export async function runConta(): Promise<void> {
   save.className = 'conta-main';
   save.addEventListener('click', async () => {
     save.disabled = true;
-    try { await c.saveMyLook(look); say('Salvo! Seu aldeão já aparece assim nas vilas (pode levar até um minuto).'); }
-    catch (e) { say(`Não foi possível salvar: ${esc(String((e as Error)?.message ?? e))}`); }
+    try {
+      await c.saveMyLook(look);
+      say('Salvo! Seu aldeão já aparece assim nas vilas (pode levar até um minuto).');
+      popup('Visual salvo! Seu aldeão já aparece assim nas vilas.', true);
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      say(`Não foi possível salvar: ${esc(msg)}`);
+      popup(`Não foi possível salvar: ${msg}`, false);
+    }
     save.disabled = false;
   });
   const out = document.createElement('button');
