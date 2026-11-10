@@ -11,6 +11,7 @@ export interface ChatMessage {
 
 export type Command =
   | { name: 'entrar' }
+  | { name: 'fila' }
   | { name: 'trabalhar'; job: Job }
   | { name: 'status' }
   | { name: 'vila' }
@@ -25,7 +26,7 @@ const RES_ALIAS: Record<string, Job> = {
 
 /** Cooldown por viewer e por comando, em ms de relógio real. */
 export const COOLDOWN_MS: Record<Command['name'], number> = {
-  entrar: 5000, trabalhar: 5000, livre: 5000, status: 5000, vila: 10000, apoiar: 60000,
+  entrar: 5000, fila: 5000, trabalhar: 5000, livre: 5000, status: 5000, vila: 10000, apoiar: 60000,
 };
 
 /** Etapa 1 do pipeline: validação (sintaxe e argumentos). */
@@ -36,6 +37,7 @@ export function parseCommand(text: string): ParseResult {
   const arg = args[0] ?? '';
   switch (head) {
     case 'entrar': return { ok: true, cmd: { name: 'entrar' } };
+    case 'fila': case 'sair': return { ok: true, cmd: { name: 'fila' } };
     case 'status': return { ok: true, cmd: { name: 'status' } };
     case 'vila': return { ok: true, cmd: { name: 'vila' } };
     case 'apoiar': return { ok: true, cmd: { name: 'apoiar' } };
@@ -107,8 +109,17 @@ export class CommandProcessor {
     const v = w.findVillager(msg.userId);
     if (cmd.name === 'entrar') {
       const r = w.addVillager(msg.userId, sanitizeName(msg.user, msg.userId), World.colorFor(msg.userId));
-      if (r.ok) reply(`bem-vindo à vila! Você começou como ${labelJob(r.villager.job)}.`);
-      else reply(r.reason === 'exists' ? 'você já está na vila.' : 'a vila está cheia! Construam casas.');
+      if (r.ok) { w.leaveQueue(msg.userId); reply(`bem-vindo à vila! Você começou como ${labelJob(r.villager.job)}.`); return; }
+      if (r.reason === 'exists') { reply('você já está na vila.'); return; }
+      const q = w.enqueue(msg.userId, sanitizeName(msg.user, msg.userId), World.colorFor(msg.userId));
+      if (q.ok) reply(q.already ? `você já está na fila: posição ${q.position}.` : `a vila está cheia! Você entrou na fila de espera: posição ${q.position}. Entra sozinho quando sair uma vaga (os aldeões constroem casas).`);
+      else reply(q.reason === 'full' ? 'a vila e a fila estão cheias.' : 'a vila está cheia! Construam casas.');
+      return;
+    }
+    if (cmd.name === 'fila') {
+      // quem está na fila pode sair com !fila; quem já mora na vila vê o tamanho da fila
+      if (w.leaveQueue(msg.userId)) reply('você saiu da fila de espera.');
+      else reply(w.waitlist.length ? `${w.waitlist.length} viewers na fila de espera.` : 'a fila de espera está vazia.');
       return;
     }
     if (!v) { reply('use !entrar primeiro.'); return; }
@@ -127,7 +138,7 @@ export class CommandProcessor {
       case 'vila': {
         const s = w.stock;
         const se = w.season;
-        reply(`dia ${w.day} · ${se.drought ? '🔥 seca' : '☀ temperada'} (${Math.ceil(se.daysLeft)}d) · ${w.villagers.length}/${w.popCap} aldeões · 🪵${s.wood} 🪨${s.stone} 🍎${s.food} 💧${s.water}.`);
+        reply(`dia ${w.day} · ${se.drought ? '🔥 seca' : '☀ temperada'} (${Math.ceil(se.daysLeft)}d) · ${w.villagers.length}/${w.popCap} aldeões${w.waitlist.length ? ` (+${w.waitlist.length} na fila)` : ''} · 🪵${s.wood} 🪨${s.stone} 🍎${s.food} 💧${s.water}.`);
         break;
       }
       case 'apoiar':
