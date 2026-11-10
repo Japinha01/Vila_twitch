@@ -185,7 +185,9 @@ export class EventFx {
     const y = hy + 3;
     w.position.set(x, gz(x, y) + 0.05, y);
     w.rotation.y = leave > 0 ? Math.PI : 0;
-    w.children.forEach((c) => { if (c.userData.wheel) c.rotation.z -= (arrive < 1 || leave > 0 ? 0.12 : 0); });
+    // 0,3 de raio: a roda gira o que a carroça anda (a ré, quando vai embora, é só a carroça virada)
+    const roll = (arrive < 1 ? arrive * (stopX - startX) : (stopX - startX) + leave * (stopX - startX)) / 0.3;
+    w.children.forEach((c) => { if (c.userData.wheel) c.rotation.z = -roll; });
   }
 
   /** Dá a cor do céu do evento ao sol, ao hemisfério e ao fundo (soma-se ao humor da estação). */
@@ -211,10 +213,19 @@ function makeWagon(): Group {
   const cover = new Mesh(new BoxGeometry(1.3, 0.55, 0.8), cloth); cover.position.set(-0.1, 0.98, 0);
   g.add(body, cover);
   for (const [x, z] of [[-0.5, 0.5], [0.5, 0.5], [-0.5, -0.5], [0.5, -0.5]]) {
-    const wheel = new Mesh(new CylinderGeometry(0.28, 0.28, 0.08, 10), dark);
-    wheel.rotation.x = Math.PI / 2; wheel.position.set(x, 0.3, z * 1.0); wheel.userData.wheel = true;
-    g.add(wheel);
+    // o pivô gira em torno do eixo do carro (z); o disco e os raios ficam dentro dele
+    const pivot = new Group();
+    pivot.position.set(x, 0.3, z);
+    pivot.userData.wheel = true;
+    const disc = new Mesh(new CylinderGeometry(0.3, 0.3, 0.08, 12), dark);
+    disc.rotation.x = Math.PI / 2;
+    const spoke = new Mesh(new BoxGeometry(0.56, 0.1, 0.1), wood);
+    const spoke2 = new Mesh(new BoxGeometry(0.1, 0.56, 0.1), wood);
+    pivot.add(disc, spoke, spoke2);
+    g.add(pivot);
   }
+  const shaft = new Mesh(new BoxGeometry(0.9, 0.08, 0.1), wood); shaft.position.set(1.05, 0.5, 0);
+  g.add(shaft);
   const ox = new Mesh(new BoxGeometry(0.9, 0.5, 0.45), fur); ox.position.set(1.5, 0.55, 0);
   const head = new Mesh(new BoxGeometry(0.35, 0.3, 0.3), fur); head.position.set(2.1, 0.7, 0);
   g.add(ox, head);
