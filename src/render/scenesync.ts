@@ -6,7 +6,7 @@ import {
 import { MIN_HARVEST, NODE_MAX } from '../sim/config';
 import type { Building, Resource, Villager } from '../sim/types';
 import type { World } from '../sim/world';
-import { COLORS, hallStage, makeBuilding, makeBush, makeRock, makeTree, mat } from './models';
+import { COLORS, buildingStage, makeBuilding, makeBush, makeRock, makeTree, mat } from './models';
 import { HS } from './terrain';
 
 const MAX_VILLAGERS = 600;
@@ -196,7 +196,7 @@ export class SceneSync {
       seen.add(n.id);
       let g = this.nodes.get(n.id);
       if (!g) {
-        g = n.kind === 'tree' ? makeTree() : n.kind === 'bush' ? makeBush() : makeRock();
+        g = n.kind === 'tree' ? makeTree(n.id) : n.kind === 'bush' ? makeBush() : makeRock();
         g.rotation.y = hash01(n.id) * Math.PI * 2;
         shade(g);
         this.scene.add(g);
@@ -212,7 +212,7 @@ export class SceneSync {
         for (const leaf of g.userData.leaves as Mesh[]) leaf.material = mat(dry ? COLORS.leafDry : COLORS.leaf);
       } else if (n.kind === 'bush') {
         g.scale.setScalar(0.55 + 0.45 * grown);
-        (g.userData.body as Mesh).material = mat(dry ? COLORS.bushDry : COLORS.bush);
+        for (const m of (g.userData.body as Group).children as Mesh[]) m.material = mat(dry ? COLORS.bushDry : COLORS.bush);
         (g.userData.berries as Group).visible = n.amount >= MIN_HARVEST;
       } else {
         g.scale.setScalar(0.65 + 0.35 * grown);
@@ -229,7 +229,7 @@ export class SceneSync {
       if (b.kind === 'dam' && b.done) continue;
       seen.add(b.id);
       let g = this.buildings.get(b.id);
-      const stage = b.kind === 'townhall' ? hallStage(w.era) : '';
+      const stage = buildingStage(b.kind, w.era);
       if (g && g.userData.stage !== stage) { this.scene.remove(g); this.buildings.delete(b.id); g = undefined; } // a fogueira vira prefeitura
       if (!g) {
         g = makeBuilding(b.kind, w.era);

@@ -1,7 +1,7 @@
 import {
   AmbientLight, BufferAttribute, BufferGeometry, Color, DirectionalLight, DoubleSide, HemisphereLight, LessDepth,
   Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, PCFSoftShadowMap, PerspectiveCamera, PlaneGeometry,
-  Group, Raycaster, Scene, Vector2, Vector3, WebGLRenderer,
+  Fog, Group, Raycaster, Scene, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { BUILDINGS, GRID_H, GRID_W } from '../sim/config';
 import type { World } from '../sim/world';
@@ -32,6 +32,7 @@ export class Renderer3D implements GameView {
   private terrainVersion = -1;
   private water!: Mesh;
   private waterPos!: Float32Array;
+  private waterCol!: Float32Array;
   private paintFrame = 0;
 
   private sun = new DirectionalLight('#fff0d0', 1.25);
@@ -55,7 +56,7 @@ export class Renderer3D implements GameView {
     this.gl = new WebGLRenderer({ canvas, antialias: true, alpha: !!opts.transparent });
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     if (opts.transparent) this.gl.setClearColor(0x000000, 0);
-    else this.scene.background = new Color('#26323a');
+    else { this.scene.background = new Color('#26323a'); this.scene.fog = new Fog('#26323a', 110, 260); }
 
     // luz: céu azulado, sol quente de lado (as sombras entram no acabamento)
     this.scene.add(this.hemi);
@@ -116,9 +117,11 @@ export class Renderer3D implements GameView {
     const normals = new Float32Array(n * 12);
     for (let i = 0; i < n * 4; i++) normals[i * 3 + 1] = 1;
     g.setAttribute('normal', new BufferAttribute(normals, 3));
+    this.waterCol = new Float32Array(n * 16);
+    g.setAttribute('color', new BufferAttribute(this.waterCol, 4).setUsage(35048));
     g.setIndex(new BufferAttribute(waterIndices(), 1));
     g.setDrawRange(0, 0);
-    this.water = new Mesh(g, new MeshStandardMaterial({ color: '#52b0ff', transparent: true, opacity: 0.72, roughness: 0.25, metalness: 0, depthWrite: true, depthFunc: LessDepth }));
+    this.water = new Mesh(g, new MeshStandardMaterial({ color: '#ffffff', vertexColors: true, transparent: true, roughness: 0.12, metalness: 0, depthWrite: true, depthFunc: LessDepth }));
     this.water.frustumCulled = false;
     this.water.renderOrder = 2;
     this.scene.add(this.water);
@@ -233,9 +236,10 @@ export class Renderer3D implements GameView {
     const now = performance.now() / 1000;
     this.sync.update(now, this.camera, this.selectedId);
     this.followStep(now);
-    const q = fillWater(w, this.waterPos, now);
+    const q = fillWater(w, this.waterPos, now, this.waterCol);
     this.water.geometry.setDrawRange(0, q * 6);
     (this.water.geometry.getAttribute('position') as BufferAttribute).needsUpdate = true;
+    (this.water.geometry.getAttribute('color') as BufferAttribute).needsUpdate = true;
 
     this.updateMood();
     this.updateOverlays();
@@ -262,7 +266,10 @@ export class Renderer3D implements GameView {
     const target = this.world.season.drought ? 1 : 0;
     this.mood += (target - this.mood) * 0.02;
     const m = this.mood;
-    if (this.scene.background) (this.scene.background as Color).set('#26323a').lerp(this.tmpDry.set('#4a3a2c'), m);
+    if (this.scene.background) {
+      (this.scene.background as Color).set('#26323a').lerp(this.tmpDry.set('#4a3a2c'), m);
+      this.scene.fog?.color.copy(this.scene.background as Color);
+    }
     this.sun.color.set('#fff0d0').lerp(this.tmpDry.set('#ffc880'), m);
     this.sun.intensity = 1.25 - 0.1 * m;
     this.hemi.color.set('#d6ecff').lerp(this.tmpDry.set('#ffe9c4'), m);
