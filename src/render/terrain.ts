@@ -108,8 +108,8 @@ export function waterIndices(): Uint32Array {
   return idx;
 }
 
-const SHALLOW = [0.56, 0.9, 1.0];
-const DEEP = [0.1, 0.4, 0.82];
+const SHALLOW = [0.2, 0.62, 0.95];
+const DEEP = [0.07, 0.3, 0.72];
 
 /**
  * Preenche as quadras de água dos tiles molhados (compactadas no início); devolve quantas.
@@ -138,9 +138,9 @@ export function fillWater(w: World, positions: Float32Array, time: number, color
         const dep = corner(cx, cz);
         const t = Math.min(1, dep / 1.6);
         // faixas de brilho que correm pela superfície (duas ondas cruzadas)
-        const sh = Math.max(0, Math.sin(time * 1.3 + cx * 1.7 + cz * 0.9) * Math.sin(time * 0.9 - cx * 0.8 + cz * 1.5)) * 0.22 * (1 - t * 0.5);
+        const sh = Math.max(0, Math.sin(time * 1.3 + cx * 1.7 + cz * 0.9) * Math.sin(time * 0.9 - cx * 0.8 + cz * 1.5)) * 0.12 * (1 - t * 0.5);
         for (let ch = 0; ch < 3; ch++) colors[c + k * 4 + ch] = Math.min(1, SHALLOW[ch] + (DEEP[ch] - SHALLOW[ch]) * t + sh);
-        colors[c + k * 4 + 3] = Math.min(0.9, 0.3 + dep * 1.3);
+        colors[c + k * 4 + 3] = Math.min(0.95, 0.68 + dep * 0.9);
       }
     }
     q++;
