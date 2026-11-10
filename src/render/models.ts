@@ -142,9 +142,9 @@ export function makeRock(): Group {
   return g;
 }
 
-export type HouseTier = 0 | 1 | 2 | 3;
+export type HouseTier = 0 | 1 | 2 | 3 | 4 | 5;
 /** Casa evolui com a era: cabana de galhos, casa de madeira, casa enxaimel, casa de pedra de dois andares. */
-export const houseTier = (era: number): HouseTier => Math.max(0, Math.min(3, era)) as HouseTier;
+export const houseTier = (era: number): HouseTier => (era <= 3 ? Math.max(0, era) : era <= 5 ? 4 : 5) as HouseTier;
 
 function house(tier: HouseTier = 1): Group {
   const g = new Group();
@@ -169,6 +169,26 @@ function house(tier: HouseTier = 1): Group {
     g.add(box(mat(COLORS.door), 0.3, 0.5, 0.06, -0.3, 0, 0.72));
     windowAt(g, 0.3, 0.38, 0.72); windowAt(g, 0.58, 0.38, 0.72);
     g.add(box(mat(COLORS.stone), 0.22, 0.7, 0.22, 0.5, 0.9, -0.35));
+  } else if (tier === 4) { // era industrial/estado: bloco de tijolo de três andares, teto plano, chaminés
+    g.add(box(mat(COLORS.brick), 1.6, 1.5, 1.4, 0, 0, 0));
+    for (const y of [0.5, 1.0]) g.add(box(mat('#8a3b28'), 1.64, 0.05, 1.44, 0, y, 0));
+    g.add(box(mat(COLORS.stoneDark), 1.7, 0.08, 1.5, 0, 1.5, 0));
+    g.add(box(mat(COLORS.door), 0.3, 0.38, 0.06, 0, 0, 0.71));
+    for (const x of [-0.5, 0.5]) for (const y of [0.1, 0.62, 1.12]) if (!(x === 0 && y === 0.1)) windowAt(g, x, y + 0.08, 0.71);
+    for (const y of [0.62, 1.12]) windowAt(g, 0, y + 0.08, 0.71);
+    for (const x of [-0.45, 0.4]) g.add(cyl(mat('#495057'), 0.1, 0.12, 0.55, 6, x, 1.58, -0.3));
+  } else if (tier === 5) { // era do futuro: torre de vidro com teto verde, painéis solares e antena
+    g.add(box(mat('#dfe9f2'), 1.5, 0.14, 1.5, 0, 0, 0));
+    g.add(box(mat('#cfe3f4'), 1.2, 1.9, 1.2, 0, 0.14, 0));
+    for (const y of [0.35, 0.75, 1.15, 1.55]) {
+      g.add(box(mat('#4ab3f0'), 1.24, 0.22, 1.24, 0, y, 0));
+      g.add(box(mat('#ffffff'), 1.26, 0.03, 1.26, 0, y + 0.22, 0));
+    }
+    g.add(box(mat('#2f9e44'), 1.3, 0.1, 1.3, 0, 2.04, 0)); // teto verde
+    g.add(box(mat('#1c3d6e'), 0.5, 0.04, 0.35, -0.25, 2.16, 0.2)); // painel solar
+    g.add(box(mat('#1c3d6e'), 0.5, 0.04, 0.35, 0.3, 2.16, -0.2));
+    g.add(cyl(mat('#adb5bd'), 0.02, 0.02, 0.5, 4, 0.5, 2.14, 0.4));
+    g.add(box(mat('#22b8cf'), 0.3, 0.4, 0.04, 0, 0.14, 0.62)); // porta de vidro
   } else { // casa de pedra de dois andares, telhado de ardósia, janelas
     g.add(box(mat(COLORS.stone), 1.6, 0.5, 1.4, 0, 0, 0));
     g.add(box(mat(COLORS.plaster), 1.5, 0.75, 1.3, 0, 0.5, 0));
@@ -199,6 +219,26 @@ function townhall(): Group {
   g.children[g.children.length - 1].rotation.x = Math.PI / 2;
   g.add(cyl(mat('#495057'), 0.02, 0.02, 0.5, 4, 0, 3.05, -0.2));
   g.add(box(mat(COLORS.flag), 0.38, 0.2, 0.03, 0.2, 3.35, -0.2));
+  return g;
+}
+
+/** Palácio de governo (Era do Estado em diante): escadaria, colunata, frontão, cúpula e bandeiras. */
+function capitol(): Group {
+  const g = new Group();
+  g.add(box(mat(COLORS.stone), 3.0, 0.2, 2.8, 0, 0, 0));
+  g.add(box(mat('#e9ecef'), 2.8, 0.1, 2.6, 0, 0.2, 0));
+  g.add(box(mat('#f8f9fa'), 2.4, 1.2, 2.0, 0, 0.3, -0.1));
+  g.add(box(mat('#dee2e6'), 2.6, 0.12, 2.2, 0, 1.5, -0.1));
+  for (let k = 0; k < 6; k++) g.add(cyl(mat('#ffffff'), 0.09, 0.09, 1.2, 8, -1.0 + k * 0.4, 0.3, 1.1)); // colunata
+  g.add(box(mat('#dee2e6'), 2.4, 0.1, 0.4, 0, 1.5, 1.05));
+  g.add(gable(mat('#f1f3f5'), 2.4, 0.5, 0.45, 0, 1.6, 1.05)); // frontão
+  g.add(cyl(mat('#f1f3f5'), 0.6, 0.65, 0.35, 12, 0, 1.62, -0.1)); // tambor
+  const dome = blob(mat('#ffd43b'), 0.55, 0, 2.0, -0.1, 0.9);
+  g.add(dome);
+  g.add(cyl(mat('#495057'), 0.02, 0.02, 0.5, 4, 0, 2.45, -0.1));
+  g.add(box(mat(COLORS.flag), 0.4, 0.24, 0.03, 0.2, 2.75, -0.1));
+  for (const x of [-1.15, 1.15]) { g.add(cyl(mat('#495057'), 0.02, 0.02, 0.9, 4, x, 0.3, 1.05)); g.add(box(mat('#1971c2'), 0.3, 0.2, 0.03, x + 0.16, 1.0, 1.05)); }
+  g.add(box(mat(COLORS.door), 0.5, 0.7, 0.05, 0, 0.3, 0.9));
   return g;
 }
 
@@ -354,11 +394,12 @@ function market(): Group {
 
 const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well, sawmill, quarry, warehouse, dam, bridge, market };
 /** Na Era da Pedra e do Bronze o centro é uma fogueira; a prefeitura vem na Era Medieval. */
-export const hallStage = (era: number): 'fogueira' | 'prefeitura' => (era < 2 ? 'fogueira' : 'prefeitura');
+export const hallStage = (era: number): 'fogueira' | 'prefeitura' | 'governo' => (era < 2 ? 'fogueira' : era < 5 ? 'prefeitura' : 'governo');
 /** Etapa visual de um prédio (muda de modelo quando a era faz ele evoluir): '' se nunca muda. */
 export const buildingStage = (kind: BuildingKind, era: number): string => (kind === 'townhall' ? hallStage(era) : kind === 'house' ? String(houseTier(era)) : '');
 export const makeBuilding = (kind: BuildingKind, era = 0): Group => {
   if (kind === 'townhall' && hallStage(era) === 'fogueira') return campfire();
+  if (kind === 'townhall' && hallStage(era) === 'governo') return capitol();
   if (kind === 'house') return house(houseTier(era));
   return MAKERS[kind]();
 };
