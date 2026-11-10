@@ -6,7 +6,7 @@ import {
   SUPPORT_BONUS, SUPPORT_MAX_TICKS, SUPPORT_TICKS, TEMPERATE_DAYS, TICKS_PER_DAY, WAREHOUSE_STORAGE,
   WATER_SLOWDOWN, WELL_RANGE, WET_DEPTH, MAX_STEP, MAX_WADE, RETRY_TICKS, WADE_SLOW_DEPTH, FLOOD_DEPTH, DEMOLISH_REFUND, DROUGHT_WARNING_DAYS,
 } from './config';
-import { ERAS, goalsMet, type EraSnapshot } from './eras';
+import { ERAS, eraGather, eraHousePop, eraStorage, goalsMet, type EraSnapshot } from './eras';
 import { findPath } from './path';
 import { hashString, mulberry32, type Rng } from './rng';
 import {
@@ -214,8 +214,8 @@ export class World {
 
   // ---------- consulta ----------
   get day(): number { return Math.floor(this.tick / TICKS_PER_DAY) + 1; }
-  get popCap(): number { return BASE_POP_CAP + this.working('house') * HOUSE_POP; }
-  get storageCap(): number { return BASE_STORAGE + this.working('warehouse') * WAREHOUSE_STORAGE; }
+  get popCap(): number { return BASE_POP_CAP + this.working('house') * (HOUSE_POP + eraHousePop(this.era)); }
+  get storageCap(): number { return Math.round((BASE_STORAGE + this.working('warehouse') * WAREHOUSE_STORAGE) * eraStorage(this.era)); }
   get supportActive(): boolean { return this.tick < this.supportUntil; }
   get starving(): boolean { return this.stock.food <= 0 || this.stock.water <= 0; }
 
@@ -1049,6 +1049,7 @@ export class World {
     if (v.workLeft > 0) return;
     const res = v.job as Resource;
     let amt = CARRY_CAPACITY;
+    if (res === 'wood' || res === 'stone') amt *= eraGather(this.era);
     if (res === 'wood') amt *= 1 + TOOL_BONUS * this.toolCoverage(this.axes);
     if (res === 'stone') amt *= 1 + TOOL_BONUS * this.toolCoverage(this.picks);
     if (res === 'wood' && this.working('sawmill') > 0) amt *= SAWMILL_BONUS;
@@ -1358,6 +1359,18 @@ export class World {
     if (houses >= 4 && this.countKind('market') < Math.floor(houses / 4)) needs.push({ kind: 'market', art: 'um', name: 'mercado', why: 'a cidade pedia comércio' });
     if (pop >= 8 && this.stock.wood < 30 && this.countKind('sawmill') === 0) needs.push({ kind: 'sawmill', art: 'uma', name: 'serraria', why: 'faltava madeira' });
     if (this.stock.stone < 20 && this.countKind('quarry') === 0) needs.push({ kind: 'quarry', art: 'uma', name: 'pedreira', why: 'faltava pedra' });
+    // metas da próxima era que pedem prédios de apoio: constroem quando a população já está perto da meta
+    const nextEra = ERAS[this.era + 1];
+    const popGoal = nextEra?.goals.find((g) => g.label === 'aldeões')?.need ?? Infinity;
+    if (nextEra && pop >= popGoal * 0.7) {
+      for (const g of nextEra.goals) {
+        if (!g.kind || needs.some((n) => n.kind === g.kind)) continue;
+        if (this.countKind(g.kind) < g.need && fr('food') > 0.25 && fr('water') > 0.25) {
+          const name = BUILDINGS[g.kind as PlaceableKind].label.toLowerCase();
+          needs.push({ kind: g.kind as PlaceableKind, art: g.kind === 'sawmill' || g.kind === 'quarry' ? 'uma' : 'um', name, why: `a ${nextEra.name} pedia isso` });
+        }
+      }
+    }
     for (const n of needs) {
       let site = this.findSite(n.kind);
       if (!site && n.kind === 'farm') this.needIrrigation = true; // sem terra irrigada livre: cavam um canal
