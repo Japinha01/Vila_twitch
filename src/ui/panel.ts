@@ -35,6 +35,7 @@ export class Panel {
   constructor(private world: World, private chat: CommandProcessor, private view: GameView) {
     chat.onReply = (to, t) => this.addLog(`@${to} ${t}`, 'bot');
     this.initSpeed();
+    this.initMoveKeys();
     this.initPalette();
     this.initChat();
     $('unfollow').addEventListener('click', () => this.selectVillager(null));
@@ -66,9 +67,32 @@ export class Panel {
       if (e.key === '2') this.setSpeed(2);
       if (e.key === '3') this.setSpeed(4);
       if (e.key === 'Escape') this.setTool({ type: 'none' });
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && 'wasd'.includes(e.key.toLowerCase()) && e.key.length === 1) this.keysDown.add(e.key.toLowerCase());
       if (e.key === 'q' || e.key === 'Q') this.view.rotateBy?.(-130);
       if (e.key === 'e' || e.key === 'E') this.view.rotateBy?.(130);
     });
+  }
+
+  // WASD move a câmera enquanto a tecla estiver pressionada (Shift acelera)
+  private keysDown = new Set<string>();
+  private shiftHeld = false;
+  private lastMove = performance.now();
+  private initMoveKeys(): void {
+    window.addEventListener('keyup', (e) => this.keysDown.delete(e.key.toLowerCase()));
+    window.addEventListener('blur', () => this.keysDown.clear());
+    const shift = (e: KeyboardEvent): void => { this.shiftHeld = e.shiftKey; };
+    window.addEventListener('keydown', shift);
+    window.addEventListener('keyup', shift);
+  }
+  private moveCamera(shift: boolean): void {
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - this.lastMove) / 1000);
+    this.lastMove = now;
+    if (!this.keysDown.size) return;
+    const px = (shift ? 1100 : 520) * dt; // pixels de tela por segundo, como um arrasto
+    const dx = (this.keysDown.has('a') ? 1 : 0) - (this.keysDown.has('d') ? 1 : 0);
+    const dy = (this.keysDown.has('w') ? 1 : 0) - (this.keysDown.has('s') ? 1 : 0);
+    if (dx || dy) this.view.panBy(dx * px, dy * px);
   }
 
   private setSpeed(s: number): void {
@@ -275,6 +299,7 @@ export class Panel {
 
   // ---------- atualização por frame ----------
   update(): void {
+    this.moveCamera(this.shiftHeld);
     const w = this.world;
     if (this.selected !== null && 'followId' in this.view && this.view.followId === null) $('unfollow').hidden = true; // a câmera foi solta mexendo nela
     for (const e of w.drainEvents()) this.addLog(/^[🔥🌧🌊✅⚠🏛]/u.test(e) ? e : `🏗 ${e}`, 'ev');

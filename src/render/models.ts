@@ -202,33 +202,42 @@ function townhall(): Group {
   return g;
 }
 
-/** Fogueira do acampamento: anel de pedras, lenha, chamas, espeto de assar e duas barracas de peles. */
+/** Fogueira do acampamento: anel de pedras, lenha em estrela, chama pequena, troncos de sentar e duas barracas de peles. */
 function campfire(): Group {
   const g = new Group();
   g.add(cyl(mat('#5c4a38'), 0.62, 0.66, 0.05, 10, 0, 0, 0)); // chão queimado
+  g.add(cyl(mat('#2b211a'), 0.36, 0.38, 0.02, 10, 0, 0.05, 0)); // cinzas
   for (let k = 0; k < 9; k++) {
     const a = (k / 9) * Math.PI * 2;
     g.add(rock(mat(k % 2 ? COLORS.stone : COLORS.stoneDark), 0.1, Math.cos(a) * 0.52, 0, Math.sin(a) * 0.52, 0.8));
   }
-  for (let k = 0; k < 4; k++) {
-    const l = cyl(mat(k % 2 ? COLORS.woodDark : COLORS.wood), 0.05, 0.05, 0.6, 5, 0, 0.1, 0);
-    l.rotation.z = Math.PI / 2 - 0.3; l.rotation.y = (k / 4) * Math.PI * 2;
-    l.position.y = 0.2;
-    g.add(l);
+  for (let k = 0; k < 5; k++) { // lenha em estrela, cada tora deitada apontando para o centro
+    const a = (k / 5) * Math.PI * 2 + 0.3;
+    const log = cyl(mat(k % 2 ? COLORS.woodDark : COLORS.wood), 0.045, 0.05, 0.42, 5, 0, 0, 0);
+    log.rotation.z = Math.PI / 2 - 0.15;
+    const holder = new Group();
+    log.position.set(0.2, 0.1, 0);
+    holder.add(log);
+    holder.rotation.y = a;
+    g.add(holder);
   }
-  g.add(cone(mat('#f76707'), 0.26, 0.6, 6, 0, 0.18, 0, 0.3));
-  g.add(cone(mat('#ff922b'), 0.18, 0.5, 5, 0.04, 0.2, 0.03, 1));
-  g.add(cone(mat('#ffd43b'), 0.1, 0.38, 5, 0, 0.2, 0));
-  for (const sx of [-0.42, 0.42]) { const p = cyl(mat(COLORS.woodDark), 0.025, 0.025, 0.62, 4, sx, 0, 0); p.rotation.z = sx > 0 ? -0.15 : 0.15; g.add(p); }
-  const spit = cyl(mat(COLORS.woodDark), 0.02, 0.02, 0.9, 4, 0, 0.55, 0); spit.rotation.z = Math.PI / 2; g.add(spit);
-  g.add(rock(mat('#a0522d'), 0.07, 0, 0.45, 0, 0.7)); // carne
-  for (const [x, z, r] of [[-1.0, 0.55, 0.4], [0.95, -0.65, 2.4]] as const) {
-    g.add(cone(mat(COLORS.cloth), 0.52, 0.85, 4, x, 0, z, r));
-    g.add(cone(mat('#a98456'), 0.2, 0.2, 4, x, 0.84, z, r));
-    g.add(box(mat('#3b2a1a'), 0.2, 0.34, 0.05, x + Math.sin(r) * 0.2, 0, z + Math.cos(r) * 0.2));
-    for (const k of [0, 1]) g.add(cyl(mat(COLORS.woodDark), 0.015, 0.015, 1.0, 3, x, 0.62, z)).rotation.z = (k ? 1 : -1) * 0.06;
+  g.add(cone(mat('#ff8a1f'), 0.19, 0.46, 6, 0, 0.1, 0, 0.3)); // chamas: pequenas, para não esconder a lenha
+  g.add(cone(mat('#ffd43b'), 0.11, 0.34, 5, 0.03, 0.1, 0.02));
+  g.add(cone(mat('#ff6b1a'), 0.1, 0.26, 5, -0.08, 0.1, -0.04, 1));
+  for (const [x, z, r] of [[0.0, 0.95, 0], [-0.95, -0.05, Math.PI / 2]] as const) { // troncos para sentar
+    const seat = cyl(mat(COLORS.trunk), 0.09, 0.09, 0.55, 6, 0, 0, 0);
+    seat.rotation.z = Math.PI / 2;
+    const h = new Group(); seat.position.y = 0.09; h.add(seat); h.position.set(x, 0, z); h.rotation.y = r; g.add(h);
   }
-  g.add(box(mat(COLORS.wood), 0.16, 0.16, 0.16, 0.2, 0, 0.9), box(mat(COLORS.woodDark), 0.14, 0.14, 0.14, 0.38, 0, 0.84)); // caixotes
+  for (const [x, z, r] of [[-1.15, -0.85, 0.7], [1.1, -0.7, -0.6]] as const) { // barracas de peles (duas águas)
+    const t = new Group();
+    t.add(gable(mat(COLORS.cloth), 0.95, 0.72, 1.05, 0, 0, 0));
+    const ridge = cyl(mat('#a98456'), 0.04, 0.04, 1.12, 5, 0, 0.7, 0); ridge.rotation.x = Math.PI / 2; ridge.position.y = 0.72; t.add(ridge); // cumeeira
+    t.add(box(mat('#2b1d12'), 0.26, 0.4, 0.04, 0, 0, 0.53)); // entrada
+    t.position.set(x, 0, z); t.rotation.y = r;
+    g.add(t);
+  }
+  g.add(box(mat(COLORS.wood), 0.16, 0.16, 0.16, 0.55, 0, 0.95), box(mat(COLORS.woodDark), 0.14, 0.14, 0.14, 0.72, 0, 0.88)); // caixotes
   return g;
 }
 

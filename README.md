@@ -217,7 +217,7 @@ O **streamer joga como no Timberborn**: constrói e melhora a vila clicando no m
 **Streamer (painel à direita):**
 - Escolha um prédio na paleta e clique no mapa (a prévia fica verde ou vermelha). Botão direito ou Esc cancela.
 - ★ Prioridade: clique numa obra para os construtores irem primeiro nela. ✖ Demolir: numa obra em andamento devolve tudo; num prédio pronto devolve metade.
-- Câmera: arraste para mover, roda do mouse dá zoom, duplo clique recentraliza. Velocidade: pausa, x1, x2, x4 (atalhos: espaço, 1, 2, 3).
+- Câmera: arraste ou use **W A S D** para mover (Shift acelera), roda do mouse dá zoom, duplo clique recentraliza. Velocidade: pausa, x1, x2, x4 (atalhos: espaço, 1, 2, 3).
 
 **Mundo:**
 - Terreno com relevo (degraus) e um **rio** que nasce no norte e corre até o sul. A água escorre pelo relevo de verdade.
