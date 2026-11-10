@@ -1,3 +1,4 @@
+import type { Look } from './looks';
 export type Resource = 'wood' | 'stone' | 'food' | 'water';
 export type Job = Resource | 'build';
 export type BuildingKind = 'townhall' | 'house' | 'farm' | 'well' | 'sawmill' | 'quarry' | 'warehouse' | 'dam' | 'bridge' | 'market' | 'waterwheel';
@@ -72,6 +73,8 @@ export interface Villager {
   born?: number;
   /** moedas da vila: 1 por 10 de XP, gastas em cartas de evento */
   coins?: number;
+  /** visual escolhido pelo viewer (cosmético; ver looks.ts) */
+  look?: Look;
 }
 
 export const JOBS: Job[] = ['wood', 'stone', 'food', 'water', 'build'];

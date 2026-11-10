@@ -1,5 +1,6 @@
 import { TICKS_PER_SECOND } from '../sim/config';
 import { CARDS, COIN_XP, EVENTS } from '../sim/events';
+import { FRAMES, HAIRS, HATS, SHIRTS, SKINS, unlockedFor, type LookPart } from '../sim/looks';
 import type { Job, Resource } from '../sim/types';
 import { World } from '../sim/world';
 import { normalize, sanitizeName } from './names';
@@ -21,6 +22,7 @@ export type Command =
   | { name: 'meus' }
   | { name: 'amigos' }
   | { name: 'moedas' }
+  | { name: 'visual'; part?: LookPart; value: string }
   | { name: 'evento'; card: string }
   | { name: 'apoiar' };
 
@@ -32,7 +34,7 @@ const RES_ALIAS: Record<string, Job> = {
 
 /** Cooldown por viewer e por comando, em ms de relógio real. */
 export const COOLDOWN_MS: Record<Command['name'], number> = {
-  entrar: 5000, fila: 5000, trabalhar: 5000, livre: 5000, status: 5000, profissao: 5000, meus: 5000, amigos: 5000, vila: 10000, apoiar: 60000, moedas: 5000, evento: 10000,
+  entrar: 5000, fila: 5000, trabalhar: 5000, livre: 5000, status: 5000, profissao: 5000, meus: 5000, amigos: 5000, vila: 10000, apoiar: 60000, moedas: 5000, evento: 10000, visual: 4000,
 };
 
 /** Etapa 1 do pipeline: validação (sintaxe e argumentos). */
@@ -50,6 +52,9 @@ export function parseCommand(text: string): ParseResult {
     case 'amigos': case 'amigo': case 'familia': return { ok: true, cmd: { name: 'amigos' } };
     case 'vila': return { ok: true, cmd: { name: 'vila' } };
     case 'apoiar': return { ok: true, cmd: { name: 'apoiar' } };
+    case 'visual': return { ok: true, cmd: { name: 'visual', value: '' } };
+    case 'pele': case 'cabelo': case 'cor': case 'moldura': return { ok: true, cmd: { name: 'visual', part: head, value: args.join(' ') } };
+    case 'chapeu': return { ok: true, cmd: { name: 'visual', part: 'chapeu', value: args.join(' ') } };
     case 'moedas': case 'moeda': return { ok: true, cmd: { name: 'moedas' } };
     case 'evento': case 'eventos': return { ok: true, cmd: { name: 'evento', card: arg } };
     case 'livre': case 'autonomo': return { ok: true, cmd: { name: 'livre' } };
@@ -169,6 +174,21 @@ export class CommandProcessor {
         const s = w.stock;
         const se = w.season;
         reply(`dia ${w.day} · ${se.drought ? '🔥 seca' : '☀ temperada'} (${Math.ceil(se.daysLeft)}d) · ${w.villagers.length}/${w.popCap} aldeões${w.waitlist.length ? ` (+${w.waitlist.length} na fila)` : ''} · 🪵${s.wood} 🪨${s.stone} 🍎${s.food} 💧${s.water}.`);
+        break;
+      }
+      case 'visual': {
+        if (!cmd.part || !cmd.value) {
+          const xp = Math.max(v.xp, w.profiles.get(msg.userId)?.xp ?? 0);
+          const u = unlockedFor(xp);
+          reply(cmd.part
+            ? `use !${cmd.part} <nome>. Opções: ${({ pele: SKINS, cabelo: HAIRS, cor: SHIRTS, chapeu: HATS, moldura: FRAMES } as Record<LookPart, { label: string }[]>)[cmd.part].map((o) => o.label).join(', ')}.`
+            : `personalize com !cor, !cabelo, !pele, !chapeu e !moldura (e "nenhum" tira). Liberados por XP (você tem ${xp}): chapéus: ${u.hats.join(', ') || 'nenhum ainda'}; molduras: ${u.frames.join(', ') || 'nenhuma ainda'}.`);
+          break;
+        }
+        const r = w.setLook(msg.userId, cmd.part, cmd.value);
+        if (r.ok) reply('visual atualizado!');
+        else if (r.reason === 'locked') reply(`ainda bloqueado: faltam ${r.need} de XP.`);
+        else reply(r.reason === 'unknown' ? `não conheço essa opção. Use !${cmd.part} sem nada para ver a lista.` : 'só viewers moradores podem mudar o visual.');
         break;
       }
       case 'moedas':
