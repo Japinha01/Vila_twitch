@@ -105,3 +105,21 @@ describe('construir sobre aldeões', () => {
     expect(w.buildingAt(Math.floor(v.x), Math.floor(v.y))).toBeUndefined();
   });
 });
+
+describe('carga sem destino', () => {
+  it('aldeão que não acha caminho até um depósito desiste e larga a carga', () => {
+    const w = new World(3);
+    w.autonomy = false;
+    w.npcsOn = false;
+    const v = w.addVillager('a', 'A', '#fff').ok ? w.villagers[0] : undefined!;
+    // cerca o aldeão com penhascos para nenhum depósito ser alcançável
+    const cx = Math.floor(v.x), cy = Math.floor(v.y);
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) === 2) w.height[w.idx(cx + dx, cy + dy)] = Math.min(9, w.height[w.idx(cx, cy)] + 5);
+    }
+    v.carry = 5; v.carryRes = 'water'; v.state = 'toStore'; v.path = null;
+    for (let t = 0; t < 1500; t++) w.step();
+    expect(v.carry).toBe(0);
+    expect(v.carryRes).toBeNull();
+  });
+});

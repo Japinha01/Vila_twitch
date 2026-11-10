@@ -60,6 +60,8 @@ export interface Villager {
   skill?: number[];
   /** morador NPC: completa a população quando preciso; sai quando um viewer precisa da vaga */
   npc?: boolean;
+  /** tentativas seguidas de guardar a carga sem achar caminho: passando do limite, ele desiste e larga a carga */
+  storeFails?: number;
 }
 
 export const JOBS: Job[] = ['wood', 'stone', 'food', 'water', 'build'];

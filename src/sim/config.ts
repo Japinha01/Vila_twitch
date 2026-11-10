@@ -153,3 +153,5 @@ export const NPC_NAMES = ['Joana', 'Tiago', 'Marta', 'Bento', 'Lia', 'Caio', 'Ri
 export const AUTO_FILL_ROUNDS = 6; // rodadas alagado antes de os aldeões aterrarem o terreno do prédio
 export const AUTO_DEMOLISH_ROUNDS = 14; // rodadas alagado antes de demolirem de vez (depois de drenar e aterrar)
 export const AUTO_DEMOLISH_MAX = 6; // demolições autônomas por vila
+
+export const STORE_GIVE_UP = 4; // tentativas seguidas sem caminho até o depósito antes de largar a carga

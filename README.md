@@ -318,3 +318,6 @@ Quando a população está abaixo da meta da próxima era, há casa livre, ningu
 
 ## Aldeões que cavam, aterram e demolem
 Prédio alagado: após 2 rodadas de autonomia (~20 s) os aldeões cavam um canal de drenagem; após 6 (~1 min) aterram o terreno do prédio (sobe 1 nível, gasta pedra, uma vez por prédio, só se não criar penhasco); após 14 (~2 min) e com o aterro já tentado, demolem o prédio (reembolso de 50%, no máximo 6 por vila) e o planejador reconstrói em terreno melhor.
+
+## Carga sem destino
+Aldeão com carga que não acha caminho até um depósito tenta mais 4 vezes e então **desiste**: larga a carga e volta a procurar trabalho. Quem sobra com carga de outra função (trocou de profissão no caminho) vai guardá-la antes de procurar trabalho. Com muita gente sem trabalho e estoque cheio, o planejador constrói mais armazéns (1 extra a cada 10 aldeões parados).
