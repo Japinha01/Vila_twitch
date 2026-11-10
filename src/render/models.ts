@@ -146,9 +146,13 @@ export function makeRock(): Group {
   return g;
 }
 
-export type HouseTier = 0 | 1 | 2 | 3 | 4 | 5;
+export type HouseTier = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 /** Casa evolui com a era: cabana de galhos, casa de madeira, casa enxaimel, casa de pedra de dois andares. */
-export const houseTier = (era: number): HouseTier => (era <= 3 ? Math.max(0, era) : era <= 5 ? 4 : 5) as HouseTier;
+/** No centro denso da cidade a casa já é um degrau acima da era: bloco de tijolo → torre de vidro → condomínio. */
+export const houseTier = (era: number, dense = false): HouseTier => {
+  const base = era <= 3 ? Math.max(0, era) : era <= 5 ? 4 : 5;
+  return Math.min(6, base + (dense && era >= 3 ? 1 : 0)) as HouseTier;
+};
 
 function house(tier: HouseTier = 1): Group {
   const g = new Group();
@@ -193,6 +197,22 @@ function house(tier: HouseTier = 1): Group {
     g.add(box(mat('#1c3d6e'), 0.5, 0.04, 0.35, 0.3, 2.16, -0.2));
     g.add(cyl(mat('#adb5bd'), 0.02, 0.02, 0.5, 4, 0.5, 2.14, 0.4));
     g.add(box(mat('#22b8cf'), 0.3, 0.4, 0.04, 0, 0.14, 0.62)); // porta de vidro
+  } else if (tier === 6) { // condomínio: pódio com jardim e duas torres ligadas por passarela
+    g.add(box(mat('#ced4da'), 1.85, 0.3, 1.75, 0, 0, 0));
+    g.add(box(mat('#51cf66'), 1.75, 0.05, 1.65, 0, 0.3, 0)); // jardim no pódio
+    for (const x of [-0.5, 0.5]) {
+      g.add(box(mat('#f1f3f5'), 0.7, 1.9, 0.7, x, 0.35, -0.2));
+      for (let f = 0; f < 6; f++) {
+        g.add(box(mat('#4ab3f0'), 0.74, 0.14, 0.74, x, 0.5 + f * 0.3, -0.2)); // faixas de janela
+        g.add(box(mat('#adb5bd'), 0.5, 0.03, 0.12, x, 0.48 + f * 0.3, 0.2)); // sacadas
+      }
+      g.add(box(mat('#2f9e44'), 0.74, 0.07, 0.74, x, 2.25, -0.2));
+      g.add(cyl(mat('#adb5bd'), 0.02, 0.02, 0.35, 4, x + 0.2, 2.32, -0.2));
+    }
+    g.add(box(mat('#dee2e6'), 0.4, 0.14, 0.3, 0, 1.45, -0.2)); // passarela
+    g.add(box(mat('#4ab3f0'), 0.9, 0.3, 0.04, 0, 0.32, 0.85));
+    g.add(box(mat('#212529'), 0.5, 0.05, 0.3, 0, 0.62, 0.95)); // marquise de entrada
+    for (const x of [-0.8, 0.8]) g.add(blob(mat('#2f9e44'), 0.16, x, 0.48, 0.7));
   } else { // casa de pedra de dois andares, telhado de ardósia, janelas
     g.add(box(mat(COLORS.stone), 1.6, 0.5, 1.4, 0, 0, 0));
     g.add(box(mat(COLORS.plaster), 1.5, 0.75, 1.3, 0, 0.5, 0));
@@ -400,6 +420,43 @@ function bridge(): Group {
   return g;
 }
 
+export type MarketTier = 0 | 1 | 2;
+/** Mercado vira galeria e depois shopping com a era; no centro denso, um degrau antes. */
+export const marketTier = (era: number, dense = false): MarketTier => (era <= 2 ? 0 : era === 3 ? (dense ? 1 : 0) : era <= 5 ? (dense ? 2 : 1) : 2);
+
+function galeria(): Group {
+  const g = new Group();
+  g.add(box(mat('#efe3c4'), 1.75, 0.85, 1.7, 0, 0, 0));
+  g.add(box(mat('#b08968'), 1.8, 0.07, 1.75, 0, 0.85, 0));
+  g.add(gable(mat('#9fd8f5'), 1.5, 0.55, 1.5, 0, 0.92, 0)); // cobertura de vidro
+  g.add(gable(mat('#dff3ff'), 0.9, 0.3, 1.52, 0, 1.02, 0));
+  for (const x of [-0.6, 0, 0.6]) { // arcadas
+    g.add(box(mat('#1c3d6e'), 0.38, 0.5, 0.05, x, 0.05, 0.86));
+    g.add(box(mat('#efe3c4'), 0.1, 0.55, 0.1, x + 0.3, 0.05, 0.88));
+  }
+  g.add(box(mat('#c2255c'), 1.1, 0.16, 0.05, 0, 0.62, 0.88)); // letreiro
+  g.add(box(mat('#fff'), 0.9, 0.05, 0.06, 0, 0.66, 0.9));
+  g.add(box(mat('#e9d8a6'), 0.35, 0.22, 0.3, -0.7, 0, 1.05), box(mat('#e03131'), 0.3, 0.16, 0.26, 0.7, 0, 1.05)); // bancas na calçada
+  return g;
+}
+
+function shopping(): Group {
+  const g = new Group();
+  g.add(box(mat('#868e96'), 1.9, 0.12, 1.85, 0, 0, 0)); // estacionamento / calçada
+  g.add(box(mat('#f1f3f5'), 1.75, 1.2, 1.5, 0, 0.12, -0.1));
+  for (const y of [0.4, 0.85]) g.add(box(mat('#4ab3f0'), 1.79, 0.22, 1.54, 0, y, -0.1)); // faixas de vidro
+  g.add(box(mat('#dee2e6'), 1.85, 0.08, 1.6, 0, 1.32, -0.1));
+  g.add(blob(mat('#9fd8f5'), 0.5, 0, 1.42, -0.1, 0.55)); // domo de vidro (átrio)
+  g.add(box(mat('#e03131'), 1.0, 0.28, 0.08, 0, 0.9, 0.7)); // letreiro grande
+  g.add(box(mat('#fff'), 0.7, 0.08, 0.09, 0, 1.0, 0.7));
+  g.add(box(mat('#212529'), 0.9, 0.05, 0.4, 0, 0.5, 0.88)); // marquise
+  for (const x of [-0.45, 0.45]) g.add(cyl(mat('#adb5bd'), 0.03, 0.03, 0.4, 4, x, 0.12, 0.98));
+  g.add(box(mat('#4ab3f0'), 0.6, 0.38, 0.04, 0, 0.12, 0.68)); // entrada
+  for (const [x, c] of [[-0.7, '#e03131'], [-0.3, '#fcc419'], [0.2, '#339af0'], [0.7, '#51cf66']] as const) g.add(box(mat(c), 0.12, 0.08, 0.2, x, 0.12, 0.88)); // carros
+  g.add(cyl(mat('#495057'), 0.02, 0.02, 0.9, 4, 0.82, 0.12, 0.8), box(mat('#fcc419'), 0.28, 0.18, 0.03, 0.95, 0.9, 0.8)); // bandeira
+  return g;
+}
+
 function market(): Group {
   const g = new Group();
   g.add(box(mat('#e9d8a6'), 1.7, 0.7, 1.7, 0, 0, 0));
@@ -486,7 +543,7 @@ const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well,
 /** Na Era da Pedra e do Bronze o centro é uma fogueira; a prefeitura vem na Era Medieval. */
 export const hallStage = (era: number): 'fogueira' | 'prefeitura' | 'governo' => (era < 2 ? 'fogueira' : era < 5 ? 'prefeitura' : 'governo');
 /** Etapa visual de um prédio (muda de modelo quando a era faz ele evoluir): '' se nunca muda. */
-export const buildingStage = (kind: BuildingKind, era: number): string => (kind === 'townhall' ? hallStage(era) : kind === 'house' ? String(houseTier(era)) : kind === 'waterwheel' ? String(wheelTier(era)) : '');
+export const buildingStage = (kind: BuildingKind, era: number, dense = false): string => (kind === 'townhall' ? hallStage(era) : kind === 'house' ? String(houseTier(era, dense)) : kind === 'market' ? String(marketTier(era, dense)) : kind === 'waterwheel' ? String(wheelTier(era)) : '');
 const bakedMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
 
 /**
@@ -521,10 +578,11 @@ function bake(src: Group): Group {
   return out;
 }
 
-export const makeBuilding = (kind: BuildingKind, era = 0): Group => {
+export const makeBuilding = (kind: BuildingKind, era = 0, dense = false): Group => {
   if (kind === 'townhall' && hallStage(era) === 'fogueira') return bake(campfire());
   if (kind === 'townhall' && hallStage(era) === 'governo') return bake(capitol());
-  if (kind === 'house') return bake(house(houseTier(era)));
+  if (kind === 'house') return bake(house(houseTier(era, dense)));
+  if (kind === 'market') return bake([market, galeria, shopping][marketTier(era, dense)]());
   if (kind === 'waterwheel') return bake(waterwheel(wheelTier(era)));
   return bake(MAKERS[kind]());
 };
