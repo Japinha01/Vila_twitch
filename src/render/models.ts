@@ -1,7 +1,8 @@
 import {
   BoxGeometry, BufferAttribute, ConeGeometry, CylinderGeometry, Group, IcosahedronGeometry, Mesh, MeshLambertMaterial,
-  BufferGeometry, type Material,
+  BufferGeometry, type Material, type Object3D,
 } from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BuildingKind } from '../sim/types';
 
 /** Modelos low poly gerados por código. Origem no chão, centro da base em (0, 0, 0). Unidade = 1 tile. */
@@ -94,9 +95,12 @@ function blob(m: Material, r: number, x: number, yCenter: number, z: number, sy 
 const hash = (n: number): number => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
 /** Árvores de três tipos (pinheiro, carvalho, bétula), escolhidos pelo id. `userData.leaves` é a folhagem que seca. */
-export function makeTree(seed = 0): Group {
+export const TREE_KINDS = 3;
+/** Tipo da árvore (0 pinheiro, 1 carvalho, 2 bétula) para um id: estável. */
+export const treeKind = (seed: number): number => Math.floor(hash(seed) * TREE_KINDS);
+export const makeTree = (seed = 0): Group => makeTreeKind(treeKind(seed));
+export function makeTreeKind(kind: number): Group {
   const g = new Group();
-  const kind = Math.floor(hash(seed) * 3);
   const leaves: Mesh[] = [];
   const foliage = (mesh: Mesh): Mesh => { leaves.push(mesh); g.add(mesh); return mesh; };
   if (kind === 0) { // pinheiro: tronco fino e cones empilhados
@@ -336,16 +340,31 @@ function sawmill(): Group {
 
 function quarry(): Group {
   const g = new Group();
-  g.add(box(mat(COLORS.stoneDark), 1.9, 0.2, 1.9, 0, 0, 0));
-  g.add(box(mat('#6c757d'), 1.2, 0.08, 1.0, -0.2, 0.2, -0.2)); // cova
-  g.add(rock(mat(COLORS.stone), 0.32, -0.45, 0.2, 0.4), rock(mat(COLORS.stone), 0.24, 0.5, 0.2, -0.4), rock(mat('#ced4da'), 0.2, 0.35, 0.2, 0.5), rock(mat(COLORS.stoneDark), 0.26, 0.55, 0.2, 0.1));
-  // carrinho de mão e picareta
-  g.add(box(mat(COLORS.woodDark), 0.4, 0.14, 0.28, -0.55, 0.22, -0.5)); // carrinho de mão
-  const wheel = cyl(mat('#495057'), 0.1, 0.1, 0.05, 8, -0.55, 0.12, -0.38);
+  g.add(box(mat('#a89a85'), 1.9, 0.05, 1.9, 0, 0, 0)); // chão de terra batida
+  // paredão de rocha em degraus ao fundo
+  g.add(box(mat(COLORS.stoneDark), 1.8, 0.45, 0.65, 0, 0.05, -0.62));
+  g.add(box(mat(COLORS.stone), 1.4, 0.4, 0.5, -0.1, 0.5, -0.66));
+  g.add(box(mat('#ced4da'), 0.9, 0.35, 0.4, -0.2, 0.9, -0.7));
+  g.add(rock(mat(COLORS.stoneDark), 0.2, 0.55, 0.5, -0.62), rock(mat(COLORS.stone), 0.16, -0.65, 0.9, -0.66), rock(mat('#dee2e6'), 0.14, 0.05, 1.25, -0.7));
+  // pilha de blocos já cortados
+  for (const [x, z] of [[-0.62, 0.3], [-0.3, 0.3], [-0.46, 0.62]] as const) g.add(box(mat('#ced4da'), 0.3, 0.26, 0.3, x, 0.05, z));
+  for (const [x, z] of [[-0.46, 0.3]] as const) g.add(box(mat(COLORS.stone), 0.3, 0.26, 0.3, x, 0.31, z));
+  g.add(box(mat('#ced4da'), 0.3, 0.26, 0.3, -0.46, 0.05, 0.3));
+  // guindaste de madeira com bloco pendurado
+  g.add(box(mat(COLORS.woodDark), 0.08, 1.0, 0.08, 0.55, 0.05, 0.2), box(mat(COLORS.woodDark), 0.08, 1.0, 0.08, 0.85, 0.05, 0.2));
+  g.add(box(mat(COLORS.wood), 0.55, 0.07, 0.08, 0.7, 1.05, 0.2));
+  g.add(cyl(mat('#e9d8a6'), 0.012, 0.012, 0.5, 3, 0.62, 0.55, 0.2));
+  g.add(box(mat(COLORS.stone), 0.22, 0.2, 0.22, 0.62, 0.35, 0.2));
+  // carrinho de mão e picareta cravada numa pedra
+  g.add(box(mat(COLORS.woodDark), 0.38, 0.12, 0.26, 0.35, 0.2, 0.7));
+  const wheel = cyl(mat('#495057'), 0.1, 0.1, 0.05, 8, 0.2, 0.1, 0.7);
   wheel.rotation.z = Math.PI / 2;
   g.add(wheel);
-  const handle = cyl(mat(COLORS.woodDark), 0.025, 0.025, 0.6, 4, 0.1, 0.2, -0.65); handle.rotation.z = 0.7; g.add(handle);
-  g.add(box(mat('#495057'), 0.3, 0.05, 0.05, 0.25, 0.7, -0.65));
+  g.add(rock(mat(COLORS.stone), 0.13, 0.05, 0.05, 0.55));
+  const handle = cyl(mat(COLORS.woodDark), 0.02, 0.02, 0.5, 4, 0.05, 0.12, 0.55);
+  handle.rotation.z = 0.5;
+  g.add(handle);
+  g.add(box(mat('#495057'), 0.26, 0.04, 0.04, 0.2, 0.56, 0.55));
   return g;
 }
 
@@ -402,9 +421,43 @@ const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well,
 export const hallStage = (era: number): 'fogueira' | 'prefeitura' | 'governo' => (era < 2 ? 'fogueira' : era < 5 ? 'prefeitura' : 'governo');
 /** Etapa visual de um prédio (muda de modelo quando a era faz ele evoluir): '' se nunca muda. */
 export const buildingStage = (kind: BuildingKind, era: number): string => (kind === 'townhall' ? hallStage(era) : kind === 'house' ? String(houseTier(era)) : '');
+const bakedMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
+
+/**
+ * Funde as dezenas de peças de um prédio numa malha só (cor por vértice): uma chamada de desenho por prédio
+ * em vez de dezenas. As peças que o jogo recolore depois (`userData.rows`, `userData.water`) ficam separadas.
+ */
+function bake(src: Group): Group {
+  const keep = new Set<Object3D>();
+  for (const key of ['rows', 'water']) { const o = src.userData[key] as Object3D | undefined; if (o) keep.add(o); }
+  src.updateMatrixWorld(true);
+  const parts: BufferGeometry[] = [];
+  src.traverse((o) => {
+    const m = o as Mesh;
+    if (!m.isMesh) return;
+    for (let p: Object3D | null = o; p; p = p.parent) if (keep.has(p)) return;
+    const g = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()) as BufferGeometry;
+    g.applyMatrix4(m.matrixWorld);
+    g.deleteAttribute('uv');
+    if (!g.getAttribute('normal')) g.computeVertexNormals();
+    const c = (m.material as MeshLambertMaterial).color;
+    const n = g.getAttribute('position').count;
+    const col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new BufferAttribute(col, 3));
+    parts.push(g);
+  });
+  const out = new Group();
+  out.userData = src.userData;
+  const merged = parts.length ? mergeGeometries(parts, false) : null;
+  if (merged) out.add(new Mesh(merged, bakedMat));
+  for (const k of keep) out.add(k);
+  return out;
+}
+
 export const makeBuilding = (kind: BuildingKind, era = 0): Group => {
-  if (kind === 'townhall' && hallStage(era) === 'fogueira') return campfire();
-  if (kind === 'townhall' && hallStage(era) === 'governo') return capitol();
-  if (kind === 'house') return house(houseTier(era));
-  return MAKERS[kind]();
+  if (kind === 'townhall' && hallStage(era) === 'fogueira') return bake(campfire());
+  if (kind === 'townhall' && hallStage(era) === 'governo') return bake(capitol());
+  if (kind === 'house') return bake(house(houseTier(era)));
+  return bake(MAKERS[kind]());
 };

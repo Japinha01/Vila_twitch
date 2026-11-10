@@ -55,6 +55,22 @@ visualBtn.addEventListener('click', () => {
   u.searchParams.delete('2d'); u.searchParams.delete('3d');
   location.href = u.toString();
 });
+// Qualidade gráfica (só no 3D): botão cicla Alta → Média → Baixa; se ficar pesado, baixa sozinha.
+const QUALITY_KEY = 'vila-do-chat:qualidade';
+const QUALITY_NAMES = ['Baixa', 'Média', 'Alta'];
+const qualityBtn = document.getElementById('quality') as HTMLButtonElement;
+if (renderer.setQuality) {
+  let saved = 2;
+  try { const v = localStorage.getItem(QUALITY_KEY); if (v !== null) saved = Number(v); } catch { /* sem armazenamento */ }
+  renderer.setQuality(Number.isFinite(saved) ? saved : 2);
+  const label = (): void => { qualityBtn.textContent = `⚙ ${QUALITY_NAMES[renderer.quality ?? 2]}`; };
+  label();
+  qualityBtn.addEventListener('click', () => {
+    renderer.setQuality!(((renderer.quality ?? 2) + 2) % 3); // 2→1→0→2
+    try { localStorage.setItem(QUALITY_KEY, String(renderer.quality)); } catch { /* ok */ }
+    label();
+  });
+} else qualityBtn.hidden = true;
 const panel = new Panel(world, chat, renderer);
 const eraBanner = new EraBanner(world, document.getElementById('stage')!);
 const eraEl = document.getElementById('eraline')!;
@@ -133,6 +149,12 @@ startTicker(50, simulate);
 
 function frame(): void {
   renderer.draw();
+  const dropped = renderer.watchPerformance?.(performance.now());
+  if (dropped != null) {
+    qualityBtn.textContent = `⚙ ${QUALITY_NAMES[dropped]}`;
+    try { localStorage.setItem(QUALITY_KEY, String(dropped)); } catch { /* ok */ }
+    panel.addLog(`⚙ O jogo estava pesado: qualidade gráfica baixou para ${QUALITY_NAMES[dropped]}. Dá para mudar no botão ⚙.`, 'ev');
+  }
   panel.update();
   eraBanner.update();
   const el = eraLine(world);

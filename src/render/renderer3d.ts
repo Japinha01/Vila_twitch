@@ -128,6 +128,30 @@ export class Renderer3D implements GameView {
   }
 
   // ---------- câmera ----------
+  /** Qualidade gráfica: 0 baixa (sem sombras, resolução 1×), 1 média (sombras leves), 2 alta. */
+  quality = 2;
+  setQuality(q: number): void {
+    this.quality = Math.max(0, Math.min(2, Math.round(q)));
+    const dpr = window.devicePixelRatio || 1;
+    this.gl.setPixelRatio(Math.min(dpr, this.quality === 2 ? 2 : this.quality === 1 ? 1.25 : 1));
+    this.sun.castShadow = this.quality > 0;
+    const size = this.quality === 2 ? 2048 : 1024;
+    if (this.sun.shadow.mapSize.x !== size) { this.sun.shadow.mapSize.set(size, size); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null; }
+    this.resize();
+  }
+
+  private slowFrames = 0;
+  private lastFrameAt = 0;
+  /** Se o quadro demora muito por vários segundos seguidos, baixa a qualidade sozinho. Devolve a nova qualidade ou null. */
+  watchPerformance(now: number): number | null {
+    const dt = now - this.lastFrameAt;
+    this.lastFrameAt = now;
+    if (dt <= 0 || dt > 1000) { this.slowFrames = 0; return null; } // aba escondida ou pausa
+    this.slowFrames = dt > 45 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 2);
+    if (this.slowFrames > 90 && this.quality > 0) { this.slowFrames = 0; this.setQuality(this.quality - 1); return this.quality; }
+    return null;
+  }
+
   private resize(): void {
     const box = this.canvas.parentElement!.getBoundingClientRect();
     this.cssW = Math.max(1, box.width);

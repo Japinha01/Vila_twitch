@@ -6,7 +6,8 @@ import {
 import { MIN_HARVEST, NODE_MAX } from '../sim/config';
 import type { Building, Resource, Villager } from '../sim/types';
 import type { World } from '../sim/world';
-import { COLORS, buildingStage, makeBuilding, makeBush, makeRock, makeTree, mat } from './models';
+import { COLORS, buildingStage, makeBuilding, makeBush, makeRock, mat } from './models';
+import { TreeBatch } from './trees';
 import { HS } from './terrain';
 
 const MAX_VILLAGERS = 600;
@@ -22,6 +23,7 @@ const hash01 = (id: number): number => ((Math.imul(id, 2654435761) >>> 0) % 1000
 /** Mantém a cena 3D (prédios, árvores, pedras, aldeões) em sincronia com o mundo. */
 export class SceneSync {
   private nodes = new Map<number, Group>();
+  private trees: TreeBatch;
   private buildings = new Map<number, Group>();
   private bodies: InstancedMesh;
   private heads: InstancedMesh;
@@ -49,6 +51,7 @@ export class SceneSync {
   private barFillGeo = new PlaneGeometry(1.1, 0.09).translate(0.55, 0, 0);
 
   constructor(private scene: Scene, private world: World) {
+    this.trees = new TreeBatch(scene);
     this.bodies = new InstancedMesh(new CylinderGeometry(0.11, 0.14, 0.34, 6), new MeshLambertMaterial({ flatShading: true }), MAX_VILLAGERS);
     this.heads = new InstancedMesh(new IcosahedronGeometry(0.1, 0), mat('#ffe0bd'), MAX_VILLAGERS);
     this.loads = new InstancedMesh(new BoxGeometry(0.11, 0.11, 0.11), new MeshLambertMaterial({ flatShading: true }), MAX_VILLAGERS);
@@ -192,11 +195,13 @@ export class SceneSync {
   private syncNodes(): void {
     const w = this.world;
     const seen = new Set<number>();
+    this.trees.update(w, hash01); // árvores: instâncias
     for (const n of w.nodes) {
+      if (n.kind === 'tree') continue;
       seen.add(n.id);
       let g = this.nodes.get(n.id);
       if (!g) {
-        g = n.kind === 'tree' ? makeTree(n.id) : n.kind === 'bush' ? makeBush() : makeRock();
+        g = n.kind === 'bush' ? makeBush() : makeRock();
         g.rotation.y = hash01(n.id) * Math.PI * 2;
         shade(g);
         this.scene.add(g);
@@ -206,11 +211,7 @@ export class SceneSync {
       g.position.set(n.x + 0.5, w.height[i] * HS, n.y + 0.5);
       const dry = w.moisture[i] < 0.35;
       const grown = Math.min(1, n.amount / NODE_MAX[n.kind]);
-      if (n.kind === 'tree') {
-        const k = (0.4 + 0.6 * grown) * (n.amount < MIN_HARVEST ? 0.7 : 1) * (0.9 + hash01(n.id) * 0.2);
-        g.scale.setScalar(k);
-        for (const leaf of g.userData.leaves as Mesh[]) leaf.material = mat(dry ? COLORS.leafDry : COLORS.leaf);
-      } else if (n.kind === 'bush') {
+      if (n.kind === 'bush') {
         g.scale.setScalar(0.55 + 0.45 * grown);
         for (const m of (g.userData.body as Group).children as Mesh[]) m.material = mat(dry ? COLORS.bushDry : COLORS.bush);
         (g.userData.berries as Group).visible = n.amount >= MIN_HARVEST;
