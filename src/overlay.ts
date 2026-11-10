@@ -103,7 +103,11 @@ export async function runOverlay(
     if (!params.has('2d')) {
       try {
         const { Renderer3D } = await import('./render/renderer3d');
-        view = new Renderer3D(canvas, m.world!, { transparent: !solid });
+        const r3 = new Renderer3D(canvas, m.world!, { transparent: !solid });
+        // mesmo visual do jogo (bloom, tilt-shift); &qualidade=0|1|2 baixa o peso se o OBS engasgar
+        const q = Number(params.get('qualidade'));
+        r3.setQuality(params.has('qualidade') && Number.isFinite(q) ? q : 2);
+        view = r3;
         return;
       } catch (err) {
         console.warn('3D indisponível no overlay, usando 2D.', err);

@@ -145,7 +145,7 @@ export class Renderer3D implements GameView {
     const dpr = window.devicePixelRatio || 1;
     this.gl.setPixelRatio(Math.min(dpr, this.quality === 2 ? 2 : this.quality === 1 ? 1.25 : 1));
     this.sun.castShadow = this.quality > 0;
-    if (this.quality === 2 && !this.transparent) { try { this.post ??= new PostFx(this.gl, this.scene, this.camera); } catch { this.post = null; } }
+    if (this.quality === 2) { try { this.post ??= new PostFx(this.gl, this.scene, this.camera, this.transparent); } catch { this.post = null; } }
     else this.post = null;
     const size = this.quality === 2 ? 2048 : 1024;
     if (this.sun.shadow.mapSize.x !== size) { this.sun.shadow.mapSize.set(size, size); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null; }
