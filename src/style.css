@@ -116,3 +116,56 @@ h2.sub { margin: 10px 0 6px; font-size: 13px; }
 #contapop.erro { background: #3a1f1f; border-color: #ff6b6b; }
 #contapop.erro span { color: #ff6b6b; }
 @keyframes contaPop { 0% { opacity: 0; transform: translate(-50%, -16px) scale(.96); } 7% { opacity: 1; transform: translate(-50%, 0) scale(1); } 88% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ===== Tema Guilda: marrom escuro, dourado, Cinzel nos títulos, relevo de madeira (inspirado no Mundo da Guilda) ===== */
+:root {
+  --ink: #14100c; --ink-2: #1f1812; --ink-3: #2a2119; --deep: #0e0b08; --line: #3a2d20; --line-2: #5a4a38;
+  --text: #efe6d2; --soft: #e3d7bf; --muted: #b7a88c; --gold: #d4a849; --gold-2: #e2b95a;
+  --wood: #6e4426; --wood-hi: #8f5c34; --wood-lo: #4a2c18; --seal: #9b2c20;
+  --display: 'Cinzel', 'Trajan Pro', Georgia, serif; --body: 'Alegreya Sans', system-ui, sans-serif;
+}
+html, body { background: var(--deep); color: var(--text); font-family: var(--body); font-size: 15px; }
+#side { background: radial-gradient(120% 80% at 50% 0%, #2a1f16 0%, #1d150f 55%, #160f0a 100%); border-left: 3px solid #140b06; box-shadow: inset 1px 0 0 var(--gold-2); scrollbar-color: var(--line-2) var(--ink); scrollbar-width: thin; }
+h1, h2, h3 { font-family: var(--display); color: var(--gold-2); letter-spacing: .04em; text-shadow: 0 2px 0 #1a0f06; }
+h1 { font-size: 20px; letter-spacing: .1em; }
+h2 { font-size: 13px; padding-bottom: 5px; background: linear-gradient(90deg, rgba(226,185,90,.55), rgba(226,185,90,0) 85%) bottom / 100% 1px no-repeat; }
+h2 small { font-family: var(--body); letter-spacing: 0; color: var(--muted); text-shadow: none; }
+#clock { color: var(--muted); }
+.card { background: linear-gradient(180deg, var(--ink-2), #191310); border: 2px solid #140b06; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--line), 0 3px 0 #0a0603; }
+button { background: linear-gradient(180deg, var(--wood-hi), var(--wood) 60%, var(--wood-lo)); color: #f6ead2; border: 2px solid #140b06; border-radius: 6px; font-weight: 700; font-family: var(--body);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 2px 0 #140b06; text-shadow: 0 1px 0 rgba(0,0,0,.4); transition: transform .06s, filter .1s; }
+button:hover { background: linear-gradient(180deg, var(--wood-hi), var(--wood) 60%, var(--wood-lo)); filter: brightness(1.13); }
+button:active { transform: translateY(2px); box-shadow: inset 0 2px 0 rgba(0,0,0,.25), 0 0 0 #140b06; }
+button.on { background: linear-gradient(180deg, #f2cf72, #d4a849 55%, #b8862e); color: #2a1a08; text-shadow: 0 1px 0 rgba(255,240,200,.5); box-shadow: inset 0 2px 0 rgba(255,255,255,.45), inset 0 -3px 0 rgba(90,54,10,.55), 0 2px 0 #140b06; }
+button:disabled { filter: grayscale(.7) brightness(.75); cursor: not-allowed; }
+input { background: #14100c; border: 2px solid var(--line-2); color: var(--text); font-family: var(--body); }
+input:focus { outline: none; border-color: var(--gold); }
+input[type=checkbox] { accent-color: var(--gold); }
+.bar { background: #0e0b08; border: 1px solid var(--line); box-shadow: inset 0 1px 2px rgba(0,0,0,.6); }
+#season { background: var(--ink-3); border: 1px solid var(--line-2); color: var(--soft); }
+#season.drought { background: #4a1f1a; border-color: #9b2c20; color: #ffd9b0; }
+#log { background: #14100c; border: 1px solid var(--line); }
+#log .me { color: var(--soft); } #log .bot { color: var(--gold-2); } #log .ev { color: #a9d98f; }
+#eraline { color: var(--gold-2); } #hud .hudera { color: var(--gold-2); } #seedinfo, #twhint, #ovhint { color: var(--muted); }
+#peoplelist .person:hover { background: var(--ink-3); } #peoplelist .person.sel { background: #3a2d20; box-shadow: inset 0 0 0 1px var(--gold); }
+#tip { background: linear-gradient(180deg, #2a1f16, #1a130d); border: 2px solid #140b06; box-shadow: inset 0 0 0 1px var(--gold-ink, #8a6420), 0 6px 18px rgba(0,0,0,.55); color: var(--text); font-family: var(--body); }
+#hud { background: rgba(20,16,12,.82); border: 2px solid #140b06; box-shadow: inset 0 0 0 1px var(--line-2); font-family: var(--display); }
+#erabanner .erabox { background: linear-gradient(180deg, #2a1f16, #160f0a); border: 3px solid var(--gold-2); box-shadow: 0 0 60px rgba(226,185,90,.5), inset 0 0 0 2px #140b06; font-family: var(--display); }
+#erabanner small { color: var(--gold-2); }
+#eventtoast { background: linear-gradient(180deg, #2a1f16, #160f0a); border: 2px solid var(--gold-2); box-shadow: inset 0 0 0 2px #140b06, 0 8px 28px rgba(0,0,0,.55); font-family: var(--body); }
+#eventtoast b { font-family: var(--display); color: var(--gold-2); }
+#eventchip { background: rgba(20,16,12,.85); border: 1px solid var(--gold); color: var(--soft); font-family: var(--body); }
+#overlaymsg { font-family: var(--display); }
+
+/* página ?conta */
+#app.conta { background: radial-gradient(120% 90% at 50% 0%, #2a1f16 0%, #1d150f 55%, #130c08 100%); font-family: var(--body); }
+.conta-box { color: var(--text); }
+.conta-box h1 { font-size: 28px; letter-spacing: .12em; }
+#cavatar { background: radial-gradient(circle at 50% 40%, #3a2d20, #14100c); border: 3px solid #140b06; border-radius: 6px; box-shadow: inset 0 0 0 2px var(--gold-2), 0 4px 0 #0a0603; }
+.conta-row h3 { font-size: 12px; letter-spacing: .08em; color: var(--gold-2); text-transform: uppercase; }
+.conta-sw button { padding: 3px 9px; }
+.conta-sw i { border: 2px solid #140b06; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
+.conta-main { background: linear-gradient(180deg, #f2cf72, #d4a849 55%, #b8862e); color: #2a1a08; border: 2px solid #140b06; border-radius: 6px; font-weight: 800; font-family: var(--display); letter-spacing: .04em; box-shadow: inset 0 2px 0 rgba(255,255,255,.45), inset 0 -3px 0 rgba(90,54,10,.55), 0 3px 0 #140b06; }
+.conta-main:hover { filter: brightness(1.07); background: linear-gradient(180deg, #f2cf72, #d4a849 55%, #b8862e); }
+#contapop { background: linear-gradient(180deg, #2a2a16, #14170c); border: 2px solid #8bc34a; box-shadow: inset 0 0 0 2px #140b06, 0 8px 30px rgba(0,0,0,.5); font-family: var(--body); }
+#contapop.erro { background: linear-gradient(180deg, #3a1f1a, #1c0f0c); border-color: #e0533f; }
