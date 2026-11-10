@@ -23,6 +23,10 @@ export interface GameView {
   setCamera?(s: CameraState): void;
   /** só o visual 3D: nomes flutuando sobre os aldeões */
   setNames?(on: boolean): void;
+  /** só o visual 3D: qualidade gráfica (0 baixa, 1 média, 2 alta) e queda automática se ficar pesado */
+  quality?: number;
+  setQuality?(q: number): void;
+  watchPerformance?(nowMs: number): number | null;
   resetCamera(): void;
   centerOn(x: number, y: number): void;
   draw(): void;
