@@ -9,7 +9,7 @@ import {
 import { ERAS, eraGather, eraHousePop, eraStorage, goalsMet, type EraSnapshot } from './eras';
 import { findPath } from './path';
 import { ACHIEVEMENTS, type AchStats } from './achievements';
-import { EVENTS, EVENT_CHANCE, EVENT_FIRST_DAY, eventStockDelta, pickEvent, type EventKind } from './events';
+import { ARRIVAL_COUNT, CARDS, CARD_HOUR_MAX, CARD_HOUR_TICKS, CARD_QUEUE_MAX, COIN_XP, EVENTS, EVENT_CHANCE, EVENT_FIRST_DAY, eventStockDelta, pickEvent, type EventKind } from './events';
 import { hashString, mulberry32, type Rng } from './rng';
 import {
   JOBS, RESOURCES, type Building, type BuildingKind, type Job, type NodeKind, type Resource,
@@ -24,9 +24,13 @@ export type PlaceableKind = Exclude<BuildingKind, 'townhall'>;
 export interface Season { drought: boolean; daysLeft: number }
 
 export const SAVE_VERSION = 1;
-export interface Profile { name: string; xp: number; job: Job }
+export interface Profile { name: string; xp: number; job: Job; coins?: number }
 
 /** Estado completo da vila em JSON simples. O terreno base (rio, nascentes) volta da seed. */
+/** Pedido de carta de evento esperando o streamer. */
+export interface CardRequest { id: number; kind: EventKind; userId: string; name: string; cost: number }
+export type CardResult = { ok: true; queued: boolean } | { ok: false; reason: 'villager' | 'unknown' | 'coins' | 'busy' | 'cooldown' | 'limit' | 'pending' | 'full'; need?: number; days?: number };
+
 export interface SaveData {
   version: number;
   seed: number;
@@ -51,7 +55,11 @@ export interface SaveData {
   waitlist?: { userId: string; name: string; color: string }[];
   picks?: number;
   leaders?: Partial<Record<Job, string>>;
-  event?: { kind: EventKind; until: number } | null;
+  event?: { kind: EventKind; until: number; by?: string } | null;
+  cardQueue?: CardRequest[];
+  cardAuto?: boolean;
+  cardCooldown?: Partial<Record<EventKind, number>>;
+  cardHistory?: number[];
   eventsSeen?: number;
   achievements?: string[];
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
@@ -147,7 +155,13 @@ export class World {
   /** pioneiro de cada profissão: o primeiro viewer a exercê-la lidera até sair ou mudar de profissão */
   leaders: Partial<Record<Job, string>> = {};
   /** evento local ativo (colheita, tempestade...) */
-  event: { kind: EventKind; until: number } | null = null;
+  event: { kind: EventKind; until: number; by?: string } | null = null;
+  /** cartas de evento: fila de aprovação, aprovação automática, espera por tipo e cartas já ativadas na última hora */
+  cardQueue: CardRequest[] = [];
+  cardAuto = true;
+  private cardCooldown: Partial<Record<EventKind, number>> = {};
+  private cardHistory: number[] = [];
+  private cardSeq = 1;
   private eventsSeen = 0;
   achievements: string[] = [];
   private canals = 0; // canais cavados pelos aldeões
@@ -170,7 +184,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
-      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, drains: this.drains, autoDemolished: this.autoDemolished, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, leaders: { ...this.leaders }, event: this.event ? { ...this.event } : null, eventsSeen: this.eventsSeen, achievements: [...this.achievements], waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
+      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, drains: this.drains, autoDemolished: this.autoDemolished, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, leaders: { ...this.leaders }, event: this.event ? { ...this.event } : null, cardQueue: this.cardQueue.map((q) => ({ ...q })), cardAuto: this.cardAuto, cardCooldown: { ...this.cardCooldown }, cardHistory: [...this.cardHistory], eventsSeen: this.eventsSeen, achievements: [...this.achievements], waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -205,6 +219,11 @@ export class World {
     this.era = Math.min(Math.max(0, data.era ?? 0), ERAS.length - 1);
     this.leaders = { ...(data.leaders ?? {}) };
     this.event = data.event ? { ...data.event } : null;
+    this.cardQueue = (data.cardQueue ?? []).map((q) => ({ ...q }));
+    this.cardSeq = this.cardQueue.reduce((m, q) => Math.max(m, q.id + 1), 1);
+    this.cardAuto = data.cardAuto ?? true;
+    this.cardCooldown = { ...(data.cardCooldown ?? {}) };
+    this.cardHistory = [...(data.cardHistory ?? [])];
     this.eventsSeen = data.eventsSeen ?? 0;
     this.achievements = [...(data.achievements ?? [])];
     this.stock = { ...data.stock };
@@ -690,7 +709,7 @@ export class World {
     const out = new Map(this.profiles);
     for (const v of this.villagers) {
       const old = out.get(v.userId);
-      out.set(v.userId, { name: v.name, xp: Math.max(v.xp, old?.xp ?? 0), job: v.job });
+      out.set(v.userId, { name: v.name, xp: Math.max(v.xp, old?.xp ?? 0), job: v.job, coins: v.coins ?? old?.coins ?? 0 });
     }
     return out;
   }
@@ -715,7 +734,7 @@ export class World {
       x: sx,
       y: sy,
       job: prof?.job ?? this.neediestResource(), state: 'idle', targetId: null,
-      carry: 0, carryRes: null, workLeft: 0, xp: prof?.xp ?? 0, path: null, pi: 0, wait: 0,
+      carry: 0, carryRes: null, workLeft: 0, xp: prof?.xp ?? 0, coins: prof?.coins ?? 0, path: null, pi: 0, wait: 0,
     };
     this.villagers.push(v);
     return { ok: true, villager: v };
@@ -934,11 +953,15 @@ export class World {
     const r = mulberry32((this.seed ^ Math.imul(this.day, 0x9e3779b1)) >>> 0);
     if (r() >= EVENT_CHANCE) return;
     const kind = pickEvent(r(), this.villagers.length);
-    if (!kind) return;
+    if (kind) this.startEvent(kind, r);
+  }
+
+  /** Começa um evento (sorteado ou resgatado por um viewer, que aparece no aviso). */
+  private startEvent(kind: EventKind, roll: () => number, by?: string): void {
     const def = EVENTS[kind];
-    this.event = { kind, until: this.tick + def.days * TICKS_PER_DAY };
+    if (def.days > 0) this.event = { kind, until: this.tick + def.days * TICKS_PER_DAY, ...(by ? { by } : {}) };
     this.eventsSeen++;
-    const delta = eventStockDelta(kind, this.stock, r);
+    const delta = eventStockDelta(kind, this.stock, roll);
     const gains: string[] = [];
     for (const res of RESOURCES) {
       const d = delta[res] ?? 0;
@@ -946,7 +969,70 @@ export class World {
       this.stock[res] = Math.min(this.storageCap, Math.max(0, this.stock[res] + d));
       gains.push(`${d > 0 ? '+' : ''}${d} ${res}`);
     }
-    this.events.push(`${def.icon} ${def.text}${gains.length ? ` (${gains.join(', ')})` : ''}`);
+    if (kind === 'arrival') {
+      let n = 0;
+      for (let i = 0; i < ARRIVAL_COUNT && this.villagers.length < this.popCap; i++) {
+        const id = this.nextId;
+        const r = this.addVillager(`npc:${id}`, NPC_NAMES[id % NPC_NAMES.length], World.colorFor(`npc:${id}`));
+        if (r.ok) { r.villager.npc = true; n++; }
+      }
+      gains.push(`+${n} moradores`);
+    }
+    this.events.push(`${def.icon} ${by ? `${by} ativou: ` : ''}${def.text}${gains.length ? ` (${gains.join(', ')})` : ''}`);
+  }
+
+  // ---------- cartas de evento (moedas da vila) ----------
+  /** O viewer pede uma carta: as moedas ficam reservadas até o streamer aprovar (ou recusar e devolver). */
+  requestCard(userId: string, name: string): CardResult {
+    const v = this.findVillager(userId);
+    const card = CARDS.find((c) => c.alias.includes(name) || c.kind === name);
+    if (!v || v.npc) return { ok: false, reason: 'villager' };
+    if (!card) return { ok: false, reason: 'unknown' };
+    if ((v.coins ?? 0) < card.cost) return { ok: false, reason: 'coins', need: card.cost - (v.coins ?? 0) };
+    if (this.cardQueue.some((q) => q.userId === userId)) return { ok: false, reason: 'pending' };
+    if (this.cardQueue.length >= CARD_QUEUE_MAX) return { ok: false, reason: 'full' };
+    const failure = this.cardBlock(card.kind);
+    if (failure) return failure;
+    v.coins = (v.coins ?? 0) - card.cost;
+    this.cardQueue.push({ id: this.cardSeq++, kind: card.kind, userId, name: v.name, cost: card.cost });
+    if (this.cardAuto) { this.approveCard(this.cardQueue[this.cardQueue.length - 1].id); return { ok: true, queued: false }; }
+    return { ok: true, queued: true };
+  }
+
+  private cardBlock(kind: EventKind): CardResult | null {
+    if (EVENTS[kind].days > 0 && this.event) return { ok: false, reason: 'busy' };
+    const left = (this.cardCooldown[kind] ?? 0) - this.tick;
+    if (left > 0) return { ok: false, reason: 'cooldown', days: Math.ceil(left / TICKS_PER_DAY) };
+    this.cardHistory = this.cardHistory.filter((t) => this.tick - t < CARD_HOUR_TICKS);
+    if (this.cardHistory.length >= CARD_HOUR_MAX) return { ok: false, reason: 'limit' };
+    return null;
+  }
+
+  private refund(q: CardRequest): void {
+    const v = this.findVillager(q.userId);
+    if (v) v.coins = (v.coins ?? 0) + q.cost;
+    else { const p = this.profiles.get(q.userId); if (p) p.coins = (p.coins ?? 0) + q.cost; }
+  }
+
+  approveCard(id: number): boolean {
+    const i = this.cardQueue.findIndex((q) => q.id === id);
+    if (i < 0) return false;
+    const q = this.cardQueue[i];
+    if (this.cardBlock(q.kind)) { this.refuseCard(id); return false; } // a situação mudou enquanto esperava: devolve as moedas
+    this.cardQueue.splice(i, 1);
+    const card = CARDS.find((c) => c.kind === q.kind)!;
+    this.cardCooldown[q.kind] = this.tick + card.cooldownDays * TICKS_PER_DAY;
+    this.cardHistory.push(this.tick);
+    this.startEvent(q.kind, mulberry32((this.seed ^ Math.imul(this.tick + 1, 0x85ebca6b)) >>> 0), q.name);
+    return true;
+  }
+
+  refuseCard(id: number): boolean {
+    const i = this.cardQueue.findIndex((q) => q.id === id);
+    if (i < 0) return false;
+    this.refund(this.cardQueue[i]);
+    this.cardQueue.splice(i, 1);
+    return true;
   }
 
   achievementStats(): AchStats {
@@ -1228,7 +1314,9 @@ export class World {
         if (r === 'arrived') {
           if (v.carryRes) {
             this.stock[v.carryRes] = Math.min(this.storageCap, this.stock[v.carryRes] + v.carry);
+            const before = Math.floor(v.xp / COIN_XP);
             v.xp += v.carry;
+            v.coins = (v.coins ?? 0) + Math.floor(v.xp / COIN_XP) - before;
             this.addSkill(v, v.carryRes, v.carry);
           }
           v.carry = 0;

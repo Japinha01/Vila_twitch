@@ -54,7 +54,7 @@ export class Cloud {
   async loadProfiles(): Promise<Map<string, Profile>> {
     const owner = this.userId;
     if (!owner) return new Map();
-    const { data, error } = await this.db.from('profiles').select('twitch_id, name, xp, job').eq('owner', owner);
+    const { data, error } = await this.db.from('profiles').select('*').eq('owner', owner);
     if (error) throw error;
     return fromProfileRows(data);
   }
@@ -64,7 +64,10 @@ export class Cloud {
     if (!owner) throw new Error('não está logado');
     const rows = toProfileRows(owner, profiles).map((r) => ({ ...r, updated_at: new Date().toISOString() }));
     if (!rows.length) return;
-    const { error } = await this.db.from('profiles').upsert(rows, { onConflict: 'owner,twitch_id' });
+    let { error } = await this.db.from('profiles').upsert(rows, { onConflict: 'owner,twitch_id' });
+    if (error && /coins/i.test(error.message)) { // coluna nova ainda não criada (supabase/coins.sql): salva sem as moedas
+      ({ error } = await this.db.from('profiles').upsert(rows.map(({ coins: _c, ...r }) => r), { onConflict: 'owner,twitch_id' }));
+    }
     if (error) throw error;
   }
 

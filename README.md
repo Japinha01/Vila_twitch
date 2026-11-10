@@ -183,7 +183,7 @@ A vila contra desastres e ondas de inimigos controladas pelo jogo. É barato de 
 | M2 | ✅ Persistência de aldeões e vila no Supabase (login com a Twitch). |
 | M3 | ✅ Painel do streamer + overlay para OBS (Fonte de navegador, via Supabase Realtime). |
 | M4 | ✅ Modo Endless completo: eventos locais, conquistas e ranking na nuvem. |
-| M5 | Eventos resgatáveis (moedas da vila primeiro, depois pontos do canal e doação). |
+| M5 | Eventos resgatáveis. ✅ Moedas da vila. Faltam pontos do canal (EventSub) e doação. |
 | M6 | Conta do viewer (login Twitch) e cosméticos globais. |
 | M7 | Modo Guerra entre canais (código de sala). |
 | M8 | Guerra de Objetivos (4 canais, objetivos secretos, sala autoritativa). |
@@ -341,3 +341,6 @@ Aldeões que dividem o mesmo tile se espalham em espiral (só visual, a simulaç
 **Conquistas**: 17 marcos (população, eras, prédios, casais, drenagem, XP, etc.) com aviso `🏆 Conquista` no log e contador no painel. Entram no save.
 
 **Ranking na nuvem**: rode `supabase/ranking.sql` uma vez no SQL Editor do Supabase. Com login, a cada salvamento (1 min) a vila sobe com nome, população, era, dia e pontuação (`pop×10 + era×200 + prédios×5 + dia`), junto com os 20 viewers de mais XP (só IDs reais da Twitch). Leitura pública; cada streamer só grava a própria linha. Os valores vêm do navegador, então o ranking é de confiança (sem anti-fraude por enquanto). Nenhuma informação secreta é enviada.
+
+## Cartas de evento com moedas da vila (M5, parte 1)
+Aldeões ganham **1 🪙 a cada 10 de XP** (`!moedas` mostra o saldo). Com `!evento` o viewer vê as cartas e com `!evento <nome>` resgata: ☔ chuva (30), 🌾 colheita (40), 🐪 caravana (50), ☄ meteoro (50), 🎉 festival (60), 🧑‍🤝‍🧑 chegada de moradores (80, +3 NPCs). Só viewers moradores (não NPCs) podem; um pedido por viewer; só um evento ativo por vez; espera global por tipo (2 a 5 dias de jogo); no máximo 6 cartas por hora de jogo; fila de até 5 pedidos. Eventos ruins (incêndio, praga) nunca são vendidos. O nome de quem ativou aparece no log e ao lado da estação. No painel, "Aprovar cartas de evento sozinho" (ligado por padrão): desligado, os pedidos esperam ✔/✖ do streamer e recusar devolve as moedas. As moedas entram no save e no perfil da nuvem; para guardá-las lá rode `supabase/coins.sql` (sem ele o jogo funciona, só sem sincronizar as moedas). Pontos do canal (EventSub) e doação ficam para a próxima parte do M5.

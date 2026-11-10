@@ -86,3 +86,5 @@ html.clear, html.clear body { background: transparent; }
 
 h2.sub { margin: 10px 0 6px; font-size: 13px; }
 #paint button.on, #terrain button.on { background: #f08c00; color: #fff; }
+#cardqueue .rk { font-size: 12px; padding: 2px 0; }
+#cardqueue button { margin-left: 4px; padding: 0 6px; }
