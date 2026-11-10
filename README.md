@@ -182,7 +182,7 @@ A vila contra desastres e ondas de inimigos controladas pelo jogo. É barato de 
 | M1 | ✅ Leitura real do chat da Twitch (`!entrar`, `!trabalhar`, ...), anônima, com tmi.js. |
 | M2 | ✅ Persistência de aldeões e vila no Supabase (login com a Twitch). |
 | M3 | ✅ Painel do streamer + overlay para OBS (Fonte de navegador, via Supabase Realtime). |
-| M4 | Modo Endless completo com eventos e ranking. |
+| M4 | ✅ Modo Endless completo: eventos locais, conquistas e ranking na nuvem. |
 | M5 | Eventos resgatáveis (moedas da vila primeiro, depois pontos do canal e doação). |
 | M6 | Conta do viewer (login Twitch) e cosméticos globais. |
 | M7 | Modo Guerra entre canais (código de sala). |
@@ -334,3 +334,10 @@ Cada aldeão agora tem pernas que andam, torso na cor do viewer, cabeça e cabel
 Aldeões que ficam perto um do outro (mesmo tile ou vizinhos) ganham afinidade a cada 2 s. Com 40 pontos viram **amigos** 🤝 (até 3 amigos cada); amigos com 140 pontos viram **casal** 💞. Casais com casa livre na vila e ninguém na fila têm, a cada minuto, 30% de chance de um **filho NPC** 👶 (até 2 por casal): menor, conta na população, vira adulto em 10 minutos (a x1) e é o último a sair quando um viewer precisa de vaga. Vínculos somem quando o outro sai da vila. Aparece ao passar o mouse (💞, 🤝, 👶) e no comando `!amigos` (também `!amigo` e `!familia`). Eventos de amizade, namoro e nascimento aparecem no log.
 
 Aldeões que dividem o mesmo tile se espalham em espiral (só visual, a simulação não muda), com movimento suave, para ninguém ficar dentro do outro.
+
+## Eventos, conquistas e ranking (M4)
+**Eventos locais**: a cada novo dia (a partir do dia 3), com 35% de chance e sem outro ativo, sorteia-se um evento determinístico por seed + dia (não mexe no gerador principal): 🌾 Dia da colheita (+50% de coleta), ⛈ Tempestade (trabalho −20%, +40 água), 🐪 Caravana (suprimentos de graça), 🔥 Incêndio (perde 20% de madeira e comida, a partir de 8 aldeões), 🤒 Praga (trabalho −25% por 2 dias, a partir de 10). Aparecem no log e ao lado da estação; entram no save.
+
+**Conquistas**: 17 marcos (população, eras, prédios, casais, drenagem, XP, etc.) com aviso `🏆 Conquista` no log e contador no painel. Entram no save.
+
+**Ranking na nuvem**: rode `supabase/ranking.sql` uma vez no SQL Editor do Supabase. Com login, a cada salvamento (1 min) a vila sobe com nome, população, era, dia e pontuação (`pop×10 + era×200 + prédios×5 + dia`), junto com os 20 viewers de mais XP (só IDs reais da Twitch). Leitura pública; cada streamer só grava a própria linha. Os valores vêm do navegador, então o ranking é de confiança (sem anti-fraude por enquanto). Nenhuma informação secreta é enviada.

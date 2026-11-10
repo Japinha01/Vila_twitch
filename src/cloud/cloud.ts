@@ -1,6 +1,8 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import type { Profile, SaveData } from '../sim/world';
 import { fromProfileRows, toProfileRows } from './rows';
+import { parseVillageRanks, parseViewerRanks, RANK_LIST_SIZE, toVillageRankRow, toViewerRankRows, type ViewerRank, type VillageRank } from './ranking';
+import type { AchStats } from '../sim/achievements';
 
 import { getSupabase } from './client';
 
@@ -64,5 +66,28 @@ export class Cloud {
     if (!rows.length) return;
     const { error } = await this.db.from('profiles').upsert(rows, { onConflict: 'owner,twitch_id' });
     if (error) throw error;
+  }
+
+  /** Publica a vila e os melhores viewers no ranking público. Lança erro se as tabelas (supabase/ranking.sql) não existirem. */
+  async uploadRanking(stats: AchStats, achievements: number, profiles: Map<string, Profile>): Promise<void> {
+    const owner = this.userId;
+    if (!owner) throw new Error('não está logado');
+    const now = new Date().toISOString();
+    const v = await this.db.from('ranking_villages').upsert({ ...toVillageRankRow(owner, this.displayName, stats, achievements), updated_at: now });
+    if (v.error) throw v.error;
+    const rows = toViewerRankRows(owner, this.displayName, profiles).map((r) => ({ ...r, updated_at: now }));
+    if (!rows.length) return;
+    const p = await this.db.from('ranking_viewers').upsert(rows, { onConflict: 'owner,twitch_id' });
+    if (p.error) throw p.error;
+  }
+
+  async loadRanking(): Promise<{ villages: VillageRank[]; viewers: ViewerRank[] }> {
+    const [v, p] = await Promise.all([
+      this.db.from('ranking_villages').select('owner, streamer, pop, era, day, score').order('score', { ascending: false }).limit(RANK_LIST_SIZE),
+      this.db.from('ranking_viewers').select('twitch_id, name, streamer, xp').order('xp', { ascending: false }).limit(RANK_LIST_SIZE),
+    ]);
+    if (v.error) throw v.error;
+    if (p.error) throw p.error;
+    return { villages: parseVillageRanks(v.data), viewers: parseViewerRanks(p.data) };
   }
 }

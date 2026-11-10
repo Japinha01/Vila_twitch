@@ -1,6 +1,8 @@
 import { CommandProcessor } from '../chat/commands';
 import { BUILDINGS, RESOURCE_LABEL } from '../sim/config';
 import { RESOURCES, type Resource } from '../sim/types';
+import { EVENTS } from '../sim/events';
+import { ACHIEVEMENTS } from '../sim/achievements';
 import type { PlaceableKind, World } from '../sim/world';
 import type { GameView } from '../render/view';
 import { describeTile, JOB_LABEL } from './info';
@@ -303,12 +305,13 @@ export class Panel {
     this.moveCamera(this.shiftHeld);
     const w = this.world;
     if (this.selected !== null && 'followId' in this.view && this.view.followId === null) $('unfollow').hidden = true; // a câmera foi solta mexendo nela
-    for (const e of w.drainEvents()) this.addLog(/^[🔥🌧🌊✅⚠🏛]/u.test(e) ? e : `🏗 ${e}`, 'ev');
+    for (const e of w.drainEvents()) this.addLog(/^[🔥🌧🌊✅⚠🏛🏆🌾⛈🐪🤒]/u.test(e) ? e : `🏗 ${e}`, 'ev');
     const se = w.season;
     const days = Math.max(1, Math.ceil(se.daysLeft));
     const seasonEl = $('season');
     seasonEl.className = se.drought ? 'drought' : '';
-    seasonEl.textContent = se.drought ? `🔥 SECA · o rio volta em ${days} dia${days > 1 ? 's' : ''}` : `☀ Temperada · seca em ${days} dia${days > 1 ? 's' : ''}`;
+    seasonEl.textContent = (se.drought ? `🔥 SECA · o rio volta em ${days} dia${days > 1 ? 's' : ''}` : `☀ Temperada · seca em ${days} dia${days > 1 ? 's' : ''}`)
+      + (w.event ? ` · ${EVENTS[w.event.kind].icon} ${EVENTS[w.event.kind].label}` : '') + ` · 🏆 ${w.achievements.length}/${ACHIEVEMENTS.length}`;
     $('clock').textContent = `Dia ${w.day}${w.supportActive ? ' · apoio ✨' : ''}${w.starving ? ' · fome/sede!' : ''}`;
     $('pop').textContent = `Aldeões ${w.villagers.length}/${w.popCap}${w.waitlist.length ? ` (+${w.waitlist.length} na fila)` : ''} · Estoque máx. ${w.storageCap} · Obras ${w.buildings.filter((b) => !b.done).length}${w.power.supply > 0 || w.power.demand > 0 ? ` · ⚡${w.power.supply}/${w.power.demand}` : ''}${w.axes + w.picks > 0 ? ` · 🪓${w.axes} ⛏${w.picks}` : ''}`;
     $('queueinfo').textContent = `Fila do chat: ${this.chat.queued} · descartadas: ${this.chat.dropped}`;
