@@ -1415,6 +1415,15 @@ export class World {
       // uma represa por trecho: sem outra a menos de 3 linhas
       if (this.buildings.some((b) => b.kind === 'dam' && Math.abs(b.y - y) < 3)) return false;
     }
+    if (kind === 'house' || kind === 'warehouse' || kind === 'market' || kind === 'sawmill' || kind === 'quarry') {
+      // beira d'água não: o telhado e a base ficariam por cima do lago (um tile de folga)
+      for (let j = -1; j <= h; j++) for (let i = -1; i <= w; i++) {
+        const tx = x + i, ty = y + j;
+        if (tx < 0 || ty < 0 || tx >= GRID_W || ty >= GRID_H) continue;
+        const t = this.idx(tx, ty);
+        if (this.channel[t] || this.water[t] > 0.05) return false;
+      }
+    }
     if (kind === 'farm') return this.irrigated[this.idx(x, y)] === 1;
     if (kind === 'well') return this.waterNear(x + w / 2, y + h / 2, WELL_RANGE);
     return true;
