@@ -75,6 +75,9 @@ for (let dy = -IRRIGATION_RADIUS; dy <= IRRIGATION_RADIUS; dy++) {
  * Estado e regras da vila. Lógica pura: sem DOM, sem relógio real, sem Math.random.
  * Mesma seed + mesma sequência de chamadas = mesmo resultado.
  */
+/** Metas de era sem `kind` explícito que mesmo assim guiam o planejador (para a vila focar em subir de era). */
+const GOAL_KIND: Record<string, BuildingKind> = { casa: 'house', casas: 'house', fazenda: 'farm', fazendas: 'farm', poço: 'well', poços: 'well' };
+
 export class World {
   tick = 0;
   /** sobe sempre que o relevo muda (represa construída ou demolida); o visual 3D refaz o terreno */
@@ -1374,10 +1377,11 @@ export class World {
     const popGoal = nextEra?.goals.find((g) => g.label === 'aldeões')?.need ?? Infinity;
     if (nextEra && pop >= popGoal * 0.7) {
       for (const g of nextEra.goals) {
-        if (!g.kind || needs.some((n) => n.kind === g.kind)) continue;
-        if (this.countKind(g.kind) < g.need && fr('food') > 0.25 && fr('water') > 0.25) {
-          const name = BUILDINGS[g.kind as PlaceableKind].label.toLowerCase();
-          needs.push({ kind: g.kind as PlaceableKind, art: g.kind === 'sawmill' || g.kind === 'quarry' ? 'uma' : 'um', name, why: `a ${nextEra.name} pedia isso` });
+        const kind = g.kind ?? GOAL_KIND[g.label];
+        if (!kind || needs.some((n) => n.kind === kind)) continue;
+        if (this.countKind(kind) < g.need && fr('food') > 0.25 && fr('water') > 0.25) {
+          const name = BUILDINGS[kind as PlaceableKind].label.toLowerCase();
+          needs.push({ kind: kind as PlaceableKind, art: kind === 'sawmill' || kind === 'quarry' || kind === 'farm' ? 'uma' : 'um', name, why: `a ${nextEra.name} pedia isso` });
         }
       }
     }
