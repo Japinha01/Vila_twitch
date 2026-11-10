@@ -126,5 +126,6 @@ void main() {
   else if (c.g > 0.5 && c.r < 0.2 && c.b < 0.2) col = vHair * sh;
   else if (c.b > 0.5 && c.r < 0.2 && c.g < 0.2) col = vShirt * sh;
   else if (c.r > 0.5 && c.g > 0.5 && c.b < 0.2) col = vPants * (sh < 1.0 ? 0.55 : 0.8);
-  gl_FragColor = vec4(col * uTint, 1.0);
+  gl_FragColor = vec4(pow(col, vec3(2.2)) * uTint, 1.0);
+  #include <colorspace_fragment>
 }`;
