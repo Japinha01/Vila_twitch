@@ -59,6 +59,9 @@ export const MAX_SPRINGS = 16;
 export const AUTO_CANAL_MAX_LEN = 26; // maior canal que os aldeões cavam de uma vez
 export const AUTO_CANAL_MAX_DEPTH = 2; // níveis que eles se dispõem a cavar num tile
 export const AUTO_CANAL_MAX = 4; // canais por vila
+export const AUTO_DRAIN_MAX = 8; // canais de drenagem por vila (alagamentos)
+export const AUTO_DRAIN_LEN = 60; // maior canal de drenagem de uma vez
+export const AUTO_DRAIN_ROUNDS = 2; // rodadas de autonomia seguidas com prédio alagado antes de cavar
 
 // ---- estradas, zonas e comércio ----
 export const ROAD_COST: Partial<Record<Resource, number>> = { wood: 2, stone: 1 }; // por tile, na hora

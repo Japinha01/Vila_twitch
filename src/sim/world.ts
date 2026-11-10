@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, WAITLIST_MAX, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -41,6 +41,7 @@ export interface SaveData {
   zone?: number[];
   springs?: number[];
   canals?: number;
+  drains?: number;
   axes?: number;
   mine?: number[];
   waitlistOn?: boolean;
@@ -138,6 +139,8 @@ export class World {
   /** pioneiro de cada profissão: o primeiro viewer a exercê-la lidera até sair ou mudar de profissão */
   leaders: Partial<Record<Job, string>> = {};
   private canals = 0; // canais cavados pelos aldeões
+  private drains = 0; // canais de drenagem cavados contra alagamentos
+  private floodRounds = 0; // rodadas de autonomia seguidas com algum prédio alagado
   private needIrrigation = false; // o planejador não achou terra irrigada para uma fazenda
   private prevDrought = false;
   private warned = false; // já avisou a seca que vem aí?
@@ -154,7 +157,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
-      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, leaders: { ...this.leaders }, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
+      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, drains: this.drains, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, leaders: { ...this.leaders }, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -205,6 +208,8 @@ export class World {
     this.springs = [];
     for (const t of data.springs ?? []) this.pushSpring(t);
     this.canals = data.canals ?? 0;
+    this.drains = data.drains ?? 0;
+    this.floodRounds = 0;
     this.waitlistOn = data.waitlistOn ?? true;
     this.waitlist = (data.waitlist ?? []).map((q) => ({ ...q }));
     if (data.mine) this.mine.set(data.mine); else this.placeMines(); // save antigo: jazidas sorteadas da seed, sem mexer na vila
@@ -361,6 +366,70 @@ export class World {
     this.terrainVersion++;
     this.events.push('⛏ Os aldeões cavaram um canal para levar água a terra seca e irrigar novas lavouras.');
     return true;
+  }
+
+  /**
+   * Prédio alagado por um tempo: os aldeões cavam um canal da água ao lado dele até terra mais baixa
+   * (ou o ralo da borda sul), longe de qualquer construção, para levar a água embora.
+   */
+  private autoDrain(): boolean {
+    if (this.drains >= AUTO_DRAIN_MAX) return false;
+    const stuck = this.buildings.filter((b) => b.done && b.flooded && b.kind !== 'townhall' && b.kind !== 'dam' && b.kind !== 'bridge');
+    if (!stuck.length) return false;
+    const landFree = (t: number): boolean => !((this.occ[t] && !this.forest[t]) || this.dam[t] || this.bridge[t] || this.road[t] || this.channel[t]) && this.water[t] < 0.05;
+    const nearBuilding = (x: number, y: number): boolean =>
+      this.buildings.some((b) => x >= b.x - 3 && x < b.x + b.w + 3 && y >= b.y - 3 && y < b.y + b.h + 3);
+    for (const target of stuck) {
+      const prev = new Int32Array(N).fill(-2);
+      const lvl = new Int32Array(N);
+      const len = new Int32Array(N);
+      const queue: number[] = [];
+      for (let y = target.y - 3; y < target.y + target.h + 3; y++) {
+        for (let x = target.x - 3; x < target.x + target.w + 3; x++) {
+          if (x < 1 || y < 1 || x >= GRID_W - 1 || y >= GRID_H - 1) continue;
+          const t = this.idx(x, y);
+          if (this.water[t] >= 0.25 && !this.dam[t] && prev[t] === -2) { prev[t] = -1; lvl[t] = this.height[t]; queue.push(t); }
+        }
+      }
+      let end = -1;
+      for (let qi = 0; qi < queue.length && end < 0; qi++) {
+        const t = queue[qi];
+        const x = t % GRID_W, y = (t - x) / GRID_W;
+        if (prev[t] !== -1 && (y >= GRID_H - 2 || (this.height[t] < lvl[t] && !nearBuilding(x, y)))) { end = t; break; }
+        if (len[t] >= AUTO_DRAIN_LEN) continue;
+        for (let k = 0; k < 4; k++) {
+          const nx = x + DX[k], ny = y + DY[k];
+          if (nx < 1 || ny < 1 || nx >= GRID_W - 1 || ny >= GRID_H - 1) continue;
+          const u = this.idx(nx, ny);
+          if (prev[u] !== -2 || !landFree(u) || this.height[u] - lvl[t] > AUTO_CANAL_MAX_DEPTH) continue;
+          prev[u] = t; lvl[u] = Math.min(lvl[t], this.height[u]); len[u] = len[t] + 1; queue.push(u);
+        }
+      }
+      if (end < 0) continue;
+      const path: number[] = [];
+      for (let t = end; prev[t] !== -1; t = prev[t]) path.push(t);
+      path.reverse(); // da água até o escoadouro
+      const start = lvl[prev[path[0]]];
+      const beds: number[] = [];
+      let levels = 0;
+      path.forEach((t, i) => {
+        // o fundo desce 1 nível a cada 6 tiles, para a água correr mesmo em terreno plano
+        const bed = Math.max(0, Math.min(start - Math.floor(i / 6), this.height[t]));
+        beds.push(bed);
+        levels += Math.max(1, this.height[t] - bed);
+      });
+      if (this.lacks(DIG_COST, levels)) return false; // junta madeira antes
+      for (const r of RESOURCES) this.stock[r] -= (DIG_COST[r] ?? 0) * levels;
+      path.forEach((t, i) => {
+        this.clearTrees(t % GRID_W, Math.floor(t / GRID_W), 1, 1);
+        this.height[t] = beds[i];
+      });
+      this.drains++;
+      this.terrainVersion++;
+      this.events.push('⛏ A vila alagou: os aldeões cavaram um canal para levar a água embora.');
+      return true;
+    }
+    return false;
   }
 
   /** Terreno quase plano (desnível de 1) perto da prefeitura: os aldeões aplainam para caber o prédio. */
@@ -1297,6 +1366,9 @@ export class World {
     this.autoJobs();
     this.autoPlan();
     this.autoCraft();
+    if (this.buildings.some((b) => b.done && b.flooded && b.kind !== 'townhall' && b.kind !== 'dam' && b.kind !== 'bridge')) {
+      if (++this.floodRounds >= AUTO_DRAIN_ROUNDS && this.autoDrain()) this.floodRounds = 0;
+    } else this.floodRounds = 0;
     if ((this.tick / AUTONOMY_EVERY) % 5 === 0 && this.needIrrigation) { this.needIrrigation = false; this.autoCanal(); }
     if ((this.tick / AUTONOMY_EVERY) % 3 === 0) { this.autoBridge(); this.autoRoad(); } // procuram mais raramente: é um cálculo maior
   }

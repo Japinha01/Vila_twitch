@@ -112,3 +112,26 @@ describe('demolir', () => {
     expect(w.dam[w.idx(at!.x, at!.y)]).toBe(0);
   });
 });
+
+describe('drenagem autônoma', () => {
+  it('prédio alagado por um tempo faz os aldeões cavarem um canal para escoar a água', () => {
+    const w = new World(2);
+    rich(w);
+    w.addVillager('u1', 'Ana', '#fff');
+    const house = built(w, 'house');
+    w.drainEvents();
+    const before = Array.from(w.height);
+    let dug = false;
+    for (let t = 0; t < 3000 && !dug; t++) {
+      // enchente persistente ao redor da casa
+      for (let y = house.y - 2; y < house.y + house.h + 2; y++) for (let x = house.x - 2; x < house.x + house.w + 2; x++) {
+        if (x > 0 && y > 0 && x < GRID_W - 1 && y < GRID_H - 1) w.water[w.idx(x, y)] = Math.max(w.water[w.idx(x, y)], 1);
+      }
+      w.step();
+      dug = w.drainEvents().some((e) => e.includes('cavaram um canal para levar a água embora'));
+    }
+    expect(dug).toBe(true);
+    expect(Array.from(w.height).some((h, i) => h < before[i])).toBe(true);
+    expect(w.serialize().drains).toBe(1);
+  });
+});
