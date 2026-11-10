@@ -135,3 +135,28 @@ describe('drenagem autônoma', () => {
     expect(w.serialize().drains).toBe(1);
   });
 });
+
+describe('aterro e demolição autônomos', () => {
+  it('prédio que não sai da água é aterrado e, se continuar alagado, demolido pelos aldeões', () => {
+    const w = new World(2);
+    rich(w);
+    w.npcsOn = false;
+    w.addVillager('u1', 'Ana', '#fff');
+    const house = built(w, 'house');
+    const h0 = w.height[w.idx(house.x, house.y)];
+    const ev: string[] = [];
+    for (let t = 0; t < 4000; t++) {
+      for (let y = house.y - 2; y < house.y + house.h + 2; y++) for (let x = house.x - 2; x < house.x + house.w + 2; x++) {
+        if (x > 0 && y > 0 && x < GRID_W - 1 && y < GRID_H - 1) w.water[w.idx(x, y)] = Math.max(w.water[w.idx(x, y)], 1);
+      }
+      w.step();
+      ev.push(...w.drainEvents());
+      if (ev.some((e) => e.includes('demoliram'))) break;
+    }
+    const text = ev.join('|');
+    expect(text).toContain('aterraram');
+    expect(text).toContain('demoliram');
+    expect(w.height[w.idx(house.x, house.y)]).toBeGreaterThan(h0);
+    expect(w.buildings.includes(house)).toBe(false);
+  });
+});

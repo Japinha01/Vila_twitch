@@ -27,6 +27,10 @@ export interface Building {
   flooded: boolean; // água acima de FLOOD_DEPTH sobre o prédio: ele não funciona
   /** userId do viewer dono do estabelecimento (líder da profissão ligada ao prédio) */
   owner?: string;
+  /** rodadas de autonomia seguidas alagado (para os aldeões decidirem entre drenar, aterrar e demolir) */
+  floodAge?: number;
+  /** já foi aterrado uma vez */
+  filled?: boolean;
 }
 
 export type VillagerState = 'idle' | 'toTarget' | 'working' | 'toStore';

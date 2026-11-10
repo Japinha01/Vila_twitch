@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, DIG_COST, NPC_EVERY, NPC_MIN, NPC_NAMES, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, AUTO_FILL_ROUNDS, AUTO_DEMOLISH_ROUNDS, AUTO_DEMOLISH_MAX, DIG_COST, NPC_EVERY, NPC_MIN, NPC_NAMES, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, WAITLIST_MAX, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -42,6 +42,7 @@ export interface SaveData {
   springs?: number[];
   canals?: number;
   drains?: number;
+  autoDemolished?: number;
   axes?: number;
   mine?: number[];
   waitlistOn?: boolean;
@@ -140,6 +141,7 @@ export class World {
   /** pioneiro de cada profissão: o primeiro viewer a exercê-la lidera até sair ou mudar de profissão */
   leaders: Partial<Record<Job, string>> = {};
   private canals = 0; // canais cavados pelos aldeões
+  private autoDemolished = 0; // demolições feitas pelos aldeões
   private drains = 0; // canais de drenagem cavados contra alagamentos
   private floodRounds = 0; // rodadas de autonomia seguidas com algum prédio alagado
   private needIrrigation = false; // o planejador não achou terra irrigada para uma fazenda
@@ -158,7 +160,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
-      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, drains: this.drains, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, leaders: { ...this.leaders }, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
+      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, drains: this.drains, autoDemolished: this.autoDemolished, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, leaders: { ...this.leaders }, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -210,6 +212,7 @@ export class World {
     for (const t of data.springs ?? []) this.pushSpring(t);
     this.canals = data.canals ?? 0;
     this.drains = data.drains ?? 0;
+    this.autoDemolished = data.autoDemolished ?? 0;
     this.floodRounds = 0;
     this.waitlistOn = data.waitlistOn ?? true;
     this.waitlist = (data.waitlist ?? []).map((q) => ({ ...q }));
@@ -431,6 +434,47 @@ export class World {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Prédio que continua alagado: depois de tentar drenar, os aldeões aterram o terreno dele (sobe 1 nível,
+   * gasta pedra) e, se ainda assim não adianta, demolem para reconstruir em terreno melhor.
+   */
+  private autoFillOrDemolish(): void {
+    const stuck = this.buildings
+      .filter((b) => b.done && b.flooded && b.kind !== 'townhall' && b.kind !== 'dam' && b.kind !== 'bridge')
+      .sort((a, b) => (b.floodAge ?? 0) - (a.floodAge ?? 0))[0];
+    if (!stuck) return;
+    const age = stuck.floodAge ?? 0;
+    const label = (BUILDINGS[stuck.kind as PlaceableKind]?.label ?? stuck.kind).toLowerCase();
+    if (age >= AUTO_FILL_ROUNDS && !stuck.filled) {
+      stuck.filled = true; // uma tentativa só, dê certo ou não
+      let top = 0;
+      const tiles: number[] = [];
+      for (let j = 0; j < stuck.h; j++) for (let i = 0; i < stuck.w; i++) { const t = this.idx(stuck.x + i, stuck.y + j); tiles.push(t); top = Math.max(top, this.height[t]); }
+      const nh = top + 1;
+      let ok = nh <= MAX_HEIGHT;
+      for (let j = -1; j <= stuck.h && ok; j++) for (let i = -1; i <= stuck.w; i++) {
+        const x = stuck.x + i, y = stuck.y + j;
+        if (i >= 0 && i < stuck.w && j >= 0 && j < stuck.h) continue;
+        if (x < 0 || y < 0 || x >= GRID_W || y >= GRID_H) continue;
+        if (nh - this.height[this.idx(x, y)] > 2 * MAX_STEP) { ok = false; break; } // viraria um penhasco
+      }
+      const levels = tiles.reduce((a, t) => a + Math.max(0, nh - this.height[t]), 0);
+      if (ok && !this.lacks(RAISE_COST, levels)) {
+        for (const r of RESOURCES) this.stock[r] -= (RAISE_COST[r] ?? 0) * levels;
+        for (const t of tiles) { this.height[t] = nh; this.water[t] = 0; }
+        this.terrainVersion++;
+        this.events.push(`🧱 Os aldeões aterraram o terreno d${stuck.kind === 'house' || stuck.kind === 'farm' || stuck.kind === 'waterwheel' ? 'a' : 'o'} ${label} alagad${stuck.kind === 'house' || stuck.kind === 'farm' || stuck.kind === 'waterwheel' ? 'a' : 'o'} para tirá-lo da água.`);
+        return;
+      }
+    }
+    if (age >= AUTO_DEMOLISH_ROUNDS && stuck.filled && this.autoDemolished < AUTO_DEMOLISH_MAX) {
+      if (this.demolish(stuck.id)) {
+        this.autoDemolished++;
+        this.events.push(`🔨 Os aldeões demoliram ${stuck.kind === 'house' || stuck.kind === 'farm' || stuck.kind === 'waterwheel' ? 'a' : 'o'} ${label} que não saía da água e vão reconstruir em terreno melhor.`);
+      }
+    }
   }
 
   /** Terreno quase plano (desnível de 1) perto da prefeitura: os aldeões aplainam para caber o prédio. */
@@ -1409,7 +1453,12 @@ export class World {
     this.autoPlan();
     this.autoCraft();
     this.autoNpc();
+    for (const b of this.buildings) {
+      if (b.done && b.flooded) b.floodAge = (b.floodAge ?? 0) + 1;
+      else if (b.floodAge) b.floodAge = 0;
+    }
     if (this.buildings.some((b) => b.done && b.flooded && b.kind !== 'townhall' && b.kind !== 'dam' && b.kind !== 'bridge')) {
+      this.autoFillOrDemolish();
       if (++this.floodRounds >= AUTO_DRAIN_ROUNDS && this.autoDrain()) this.floodRounds = 0;
     } else this.floodRounds = 0;
     if ((this.tick / AUTONOMY_EVERY) % 5 === 0 && this.needIrrigation) { this.needIrrigation = false; this.autoCanal(); }

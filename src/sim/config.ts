@@ -149,3 +149,7 @@ export const POWER_WATER_FULL = 3; // tiles de água (profundidade >= 1) em volt
 export const NPC_MIN = 6; // NPCs permitidos mesmo sem viewers; depois, no máximo o número de viewers
 export const NPC_EVERY = 3; // um NPC novo a cada N rodadas de autonomia (~30 s), se a vila precisar
 export const NPC_NAMES = ['Joana', 'Tiago', 'Marta', 'Bento', 'Lia', 'Caio', 'Rita', 'Davi', 'Nina', 'Otto', 'Vera', 'Hugo', 'Alma', 'Teo', 'Lara', 'Beto'];
+
+export const AUTO_FILL_ROUNDS = 6; // rodadas alagado antes de os aldeões aterrarem o terreno do prédio
+export const AUTO_DEMOLISH_ROUNDS = 14; // rodadas alagado antes de demolirem de vez (depois de drenar e aterrar)
+export const AUTO_DEMOLISH_MAX = 6; // demolições autônomas por vila
