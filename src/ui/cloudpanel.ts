@@ -103,4 +103,28 @@ export async function initCloudPanel({ world, log, loadCloudSave }: Hooks): Prom
     }
   }
   startTicker(AUTOSAVE_MS, () => { void save(false); });
+
+  // visual global: viewers que montaram o visual na página ?conta aparecem assim em qualquer vila
+  const looked = new Map<string, string>(); // id -> visual aplicado por aqui (JSON)
+  const fetched = new Set<string>();
+  let rounds = 0;
+  const syncLooks = async (): Promise<void> => {
+    if (rounds++ % 15 === 0) fetched.clear(); // de vez em quando busca de novo, para pegar mudanças
+    const ids = world.villagers.filter((v) => !v.npc && /^\d+$/.test(v.userId) && !fetched.has(v.userId)).map((v) => v.userId);
+    if (!ids.length) return;
+    ids.forEach((i) => fetched.add(i));
+    try {
+      const looks = await c.loadLooks(ids);
+      for (const v of world.villagers) {
+        const l = looks.get(v.userId);
+        if (!l) continue;
+        const mine = looked.get(v.userId);
+        if (v.look && JSON.stringify(v.look) !== mine) continue; // o viewer mexeu pelo chat: vale o do chat
+        v.look = l;
+        looked.set(v.userId, JSON.stringify(l));
+      }
+    } catch { /* tabela ainda não criada (supabase/viewer_looks.sql): segue sem o visual global */ }
+  };
+  startTicker(20000, () => { void syncLooks(); });
+  void syncLooks();
 }

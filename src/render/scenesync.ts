@@ -1,4 +1,4 @@
-import { FRAMES } from '../sim/looks';
+import { FRAMES, visibleLook } from '../sim/looks';
 import {
   BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh,
   MeshBasicMaterial, PlaneGeometry, RingGeometry, Sprite, SpriteMaterial,
@@ -193,7 +193,7 @@ export class SceneSync {
     for (const v of list) {
       seen.add(v.id);
       let sp = this.nameSprites.get(v.id);
-      const tex = this.nameTexture(v.name, v.look?.frame);
+      const tex = this.nameTexture(v.name, visibleLook(v.look, v.xp)?.frame);
       if (!sp) {
         sp = new Sprite(new SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
         sp.scale.set(1.8, 0.39, 1);

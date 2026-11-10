@@ -6,7 +6,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Job, Resource, Villager } from '../sim/types';
 import { JOBS } from '../sim/types';
 import type { World } from '../sim/world';
-import { HAIRS, HATS, SHIRTS, SKINS, type HatId } from '../sim/looks';
+import { HAIRS, HATS, SHIRTS, SKINS, visibleLook, type HatId } from '../sim/looks';
 import { HS } from './terrain';
 
 const MAX = 600;
@@ -176,11 +176,12 @@ export class People {
       at3(0, 0.285, 0); d.updateMatrix(); this.torso.setMatrixAt(i, d.matrix); this.torso.setColorAt(i, c.shirt);
       at3(0, 0.46, 0); d.updateMatrix(); this.heads.setMatrixAt(i, d.matrix); this.heads.setColorAt(i, c.skin);
       at3(0, 0.465, -0.012); d.updateMatrix(); this.hair.setMatrixAt(i, d.matrix); this.hair.setColorAt(i, c.hair);
+      const look = visibleLook(v.look, v.xp);
+      const hi = look?.hat ? HATS.findIndex((h) => h.id === look.hat) : -1;
       const crown = !v.npc && world.isLeader(v);
-      at3(0, 0.575, 0); d.scale.setScalar(crown && !v.look?.hat ? sc : 0.0001); d.updateMatrix(); this.crowns.setMatrixAt(i, d.matrix);
+      at3(0, 0.575, 0); d.scale.setScalar(crown && hi < 0 ? sc : 0.0001); d.updateMatrix(); this.crowns.setMatrixAt(i, d.matrix);
       d.scale.setScalar(sc);
 
-      const hi = v.look?.hat ? HATS.findIndex((h) => h.id === v.look!.hat) : -1;
       if (hi >= 0) {
         const hm = this.hats[hi];
         d.rotation.set(0, f.a, 0);

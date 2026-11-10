@@ -184,7 +184,7 @@ A vila contra desastres e ondas de inimigos controladas pelo jogo. É barato de 
 | M3 | ✅ Painel do streamer + overlay para OBS (Fonte de navegador, via Supabase Realtime). |
 | M4 | ✅ Modo Endless completo: eventos locais, conquistas e ranking na nuvem. |
 | M5 | Eventos resgatáveis. ✅ Moedas da vila. Faltam pontos do canal (EventSub) e doação. |
-| M6 | Conta do viewer e cosméticos. ✅ Visual pelo chat (cor, cabelo, pele, chapéu, moldura). Faltam a página de conta com login e o visual global entre canais. |
+| M6 | ✅ Conta do viewer e cosméticos: visual pelo chat e página `?conta` com login da Twitch (visual global entre canais). |
 | M7 | Modo Guerra entre canais (código de sala). |
 | M8 | Guerra de Objetivos (4 canais, objetivos secretos, sala autoritativa). |
 | M9 | Cooperativo/ondas, temporadas, passaporte. |
@@ -352,3 +352,6 @@ Cada evento tem efeito na cena e no céu (só visual, em tempo real): ☔ chuva 
 
 ## Visual do viewer (M6, parte 1)
 Cada aldeão tem um visual padrão gerado pelo ID da Twitch (sempre o mesmo). O viewer personaliza pelo chat: `!cor`, `!cabelo`, `!pele`, `!chapeu`, `!moldura` (sem nome mostra as opções, `nenhum` volta ao padrão) e `!visual` resume o que o XP já liberou. Cor, cabelo e pele são livres; **chapéus** (boné 50 XP, chapéu de palha 150, cartola 400, chapéu de mago 900) e **molduras do nome** (bronze 200, prata 600, ouro 1500, neon 3000) se desbloqueiam com XP. Cosmético nunca dá poder: nada disso muda a simulação. O líder de profissão só mostra a coroa se não estiver de chapéu. O visual fica no perfil (save e nuvem; para a nuvem rode `supabase/looks.sql`) e aparece também no overlay. Falta para fechar o M6: página de conta com login do viewer e o visual global entre canais (hoje o perfil é por streamer).
+
+## Página do viewer e visual global (M6, parte 2)
+Abra o site com `?conta` (ex.: `https://vila-twitch.vercel.app/?conta`): o viewer entra com a Twitch (só para saber o ID, sem permissões extras), monta o boneco (camisa, cabelo, pele, chapéu, moldura do nome) com prévia e clica em Salvar. O visual vai para a tabela pública `viewer_looks` e vale em **qualquer vila**: o jogo do streamer busca pelo ID da Twitch dos viewers que entraram (a cada 20 s, sem precisar de login do streamer; precisa da nuvem configurada). Quem escolheu pelo chat na vila atual mantém o do chat. Chapéu e moldura só aparecem quando o XP do viewer **naquela vila** já os liberou. Para ligar, rode `supabase/viewer_looks.sql` no SQL Editor do Supabase (cria a tabela, a leitura pública e a regra que só deixa cada pessoa gravar no próprio ID da Twitch, conferido na identidade de login).

@@ -97,3 +97,16 @@ h2.sub { margin: 10px 0 6px; font-size: 13px; }
 #eventtoast span { font-size: 14px; opacity: .92; }
 @keyframes evPop { 0% { opacity: 0; transform: translate(-50%, -14px); } 8% { opacity: 1; transform: translate(-50%, 0); } 85% { opacity: 1; } 100% { opacity: 0; } }
 #eventchip { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); padding: 4px 14px; border-radius: 999px; background: rgba(20,26,30,.75); border: 1px solid #74c0fc; color: #fff; font-size: 13px; pointer-events: none; z-index: 18; }
+
+#app.conta { display: block; overflow: auto; }
+.conta-box { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; color: #e9ecef; }
+.conta-box h1 { margin: 0 0 8px; }
+.conta-grid { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin-top: 16px; }
+#cavatar { background: #26323a; border-radius: 14px; flex: none; }
+#copts { flex: 1; min-width: 260px; }
+.conta-row h3 { margin: 12px 0 4px; font-size: 13px; opacity: .85; }
+.conta-sw { display: flex; flex-wrap: wrap; gap: 6px; }
+.conta-sw button { display: flex; align-items: center; gap: 6px; padding: 3px 8px; }
+.conta-sw i { width: 20px; height: 20px; border-radius: 50%; display: inline-block; border: 1px solid #0006; }
+.conta-sw small { font-size: 11px; line-height: 1.1; text-align: left; }
+.conta-main { padding: 8px 18px; font-size: 15px; background: #f08c00; color: #fff; border: 0; border-radius: 8px; cursor: pointer; margin-top: 14px; }
