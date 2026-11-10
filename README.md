@@ -315,3 +315,6 @@ Os estabelecimentos (menos as casas) ganham um **letreiro dourado** com o nome (
 
 ## Moradores NPC
 Quando a população está abaixo da meta da próxima era, há casa livre, ninguém espera na fila e comida e água estão acima de 30%, chega um **NPC** (a cada ~30 s). Nunca há mais NPCs do que viewers (mínimo 6, para a vila crescer mesmo com o chat vazio). NPCs trabalham sozinhos e contam na população, mas não lideram profissões nem têm estabelecimentos. **Viewer tem prioridade**: com a vila cheia, um NPC sai para dar a vaga (também para quem está na fila). Os aldeões agora nascem fora de prédios e de água funda.
+
+## Aldeões que cavam, aterram e demolem
+Prédio alagado: após 2 rodadas de autonomia (~20 s) os aldeões cavam um canal de drenagem; após 6 (~1 min) aterram o terreno do prédio (sobe 1 nível, gasta pedra, uma vez por prédio, só se não criar penhasco); após 14 (~2 min) e com o aterro já tentado, demolem o prédio (reembolso de 50%, no máximo 6 por vila) e o planejador reconstrói em terreno melhor.
