@@ -115,7 +115,7 @@ export class SceneSync {
   update(time: number, camera: Camera, selectedId: number | null): void {
     this.smoothPositions(time);
     this.syncNodes();
-    this.syncBuildings(camera);
+    this.syncBuildings(camera, time);
     this.syncVillagers(time);
     this.syncSelection(camera, selectedId);
     this.syncNames();
@@ -226,7 +226,7 @@ export class SceneSync {
     for (const [id, g] of this.nodes) if (!seen.has(id)) { this.scene.remove(g); this.nodes.delete(id); }
   }
 
-  private syncBuildings(camera: Camera): void {
+  private syncBuildings(camera: Camera, time: number): void {
     const w = this.world;
     const seen = new Set<number>();
     for (const b of w.buildings) {
@@ -251,6 +251,9 @@ export class SceneSync {
       if (b.kind === 'farm') {
         const ok = w.irrigated[w.idx(b.x, b.y)] === 1;
         for (const r of (g.userData.rows as Group).children as Mesh[]) r.material = mat(ok ? COLORS.crop : COLORS.cropDry);
+      } else if (b.kind === 'waterwheel') {
+        const wheel = g.userData.wheel as Group | undefined;
+        if (wheel) wheel.rotation.x = b.done && !b.flooded ? time * 2.2 * w.wheelFlow(b) : wheel.rotation.x; // gira com a água; seca, para
       } else if (b.kind === 'well') {
         (g.userData.water as Mesh).material = mat(w.buildingWorks(b) ? COLORS.water : '#495057');
       }

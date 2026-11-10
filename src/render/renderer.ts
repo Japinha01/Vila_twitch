@@ -290,6 +290,9 @@ export class Renderer implements GameView {
       case 'market':
         this.box(x + 0.1, y + 0.1, w - 0.2, h - 0.2, z0, 0.8, '#d9480f', '#e9d8a6', '#c9b783');
         break;
+      case 'waterwheel':
+        this.box(x + 0.1, y + 0.3, w - 0.2, h - 0.5, z0, 0.7, '#74c0fc', '#ced4da', '#9aa5b1');
+        break;
       case 'bridge':
         this.box(x, y, w, h, z0, 0.12, '#d6a76a', '#b98b53', '#9d733f');
         break;

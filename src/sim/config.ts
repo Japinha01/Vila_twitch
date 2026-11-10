@@ -120,6 +120,7 @@ export const BUILDINGS: Record<Exclude<BuildingKind, 'townhall'>, BuildingSpec> 
   dam: { label: 'Represa', w: 2, h: 1, cost: { wood: 30, stone: 20 }, work: 150 },
   bridge: { label: 'Ponte', w: 1, h: 1, cost: { wood: 8 }, work: 40 },
   market: { label: 'Mercado', w: 2, h: 2, cost: { wood: 30, stone: 10 }, work: 140 },
+  waterwheel: { label: 'Roda d\'água', w: 2, h: 2, cost: { wood: 35, stone: 15 }, work: 160 },
 };
 
 export const RESOURCE_LABEL: Record<Resource, string> = {
@@ -135,3 +136,9 @@ export const WAITLIST_MAX = 200; // fila de espera: quantos viewers cabem
 export const MINE_VEINS = 3; // jazidas por mapa de tamanho base (cresce com a raiz da escala do mapa)
 export const MINE_MIN_DIST = 11; // longe da fogueira
 export const QUARRY_MAX_DIST = 45; // até onde a vila procura mina para a pedreira
+
+// Energia: rodas d'água (viram turbinas e usinas com as eras) alimentam serrarias, pedreiras e mercados
+export const POWER_SUPPLY = [10, 10, 10, 20, 20, 35, 35, 60]; // por roda, por era (com água suficiente)
+export const POWER_DEMAND: Partial<Record<'sawmill' | 'quarry' | 'market', number>> = { sawmill: 4, quarry: 6, market: 3 };
+export const POWER_BONUS = 0.5; // +50% de rendimento com energia plena
+export const POWER_WATER_FULL = 3; // tiles de água (profundidade >= 1) em volta para a roda render 100%
