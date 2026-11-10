@@ -25,6 +25,8 @@ export interface Building {
   done: boolean;
   priority: boolean; // obra prioritária: construtores vão primeiro
   flooded: boolean; // água acima de FLOOD_DEPTH sobre o prédio: ele não funciona
+  /** userId do viewer dono do estabelecimento (líder da profissão ligada ao prédio) */
+  owner?: string;
 }
 
 export type VillagerState = 'idle' | 'toTarget' | 'working' | 'toStore';
@@ -50,8 +52,11 @@ export interface Villager {
   wait: number; // ticks de espera antes de tentar de novo
   /** true = o viewer escolheu a profissão com !trabalhar; false/ausente = o aldeão decide sozinho */
   ordered?: boolean;
+  /** experiência por profissão, na ordem de JOBS: a maior define a profissão do viewer */
+  skill?: number[];
 }
 
+export const JOBS: Job[] = ['wood', 'stone', 'food', 'water', 'build'];
 export const RESOURCES: Resource[] = ['wood', 'stone', 'food', 'water'];
 
 /** Zonas pintadas pelo streamer: 0 nenhuma, 1 residencial, 2 comercial, 3 industrial. */

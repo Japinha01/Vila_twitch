@@ -10,7 +10,7 @@ import { ERAS, eraGather, eraHousePop, eraStorage, goalsMet, type EraSnapshot } 
 import { findPath } from './path';
 import { hashString, mulberry32, type Rng } from './rng';
 import {
-  RESOURCES, type Building, type BuildingKind, type Job, type NodeKind, type Resource,
+  JOBS, RESOURCES, type Building, type BuildingKind, type Job, type NodeKind, type Resource,
   type ResourceNode, type Stock, type Villager, type ZoneKind,
 } from './types';
 
@@ -46,6 +46,7 @@ export interface SaveData {
   waitlistOn?: boolean;
   waitlist?: { userId: string; name: string; color: string }[];
   picks?: number;
+  leaders?: Partial<Record<Job, string>>;
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
   buildings: Building[];
   nodes: ResourceNode[];
@@ -134,6 +135,8 @@ export class World {
   power = { supply: 0, demand: 0, ratio: 0 };
   axes = 0; // machados fabricados (aceleram a lenha)
   picks = 0; // picaretas fabricadas (aceleram a pedra)
+  /** pioneiro de cada profissão: o primeiro viewer a exercê-la lidera até sair ou mudar de profissão */
+  leaders: Partial<Record<Job, string>> = {};
   private canals = 0; // canais cavados pelos aldeões
   private needIrrigation = false; // o planejador não achou terra irrigada para uma fazenda
   private prevDrought = false;
@@ -151,7 +154,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
-      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
+      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, leaders: { ...this.leaders }, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -184,6 +187,7 @@ export class World {
   applySave(data: SaveData): void {
     this.tick = data.tick;
     this.era = Math.min(Math.max(0, data.era ?? 0), ERAS.length - 1);
+    this.leaders = { ...(data.leaders ?? {}) };
     this.stock = { ...data.stock };
     this.supportUntil = data.supportUntil;
     this.nextId = data.nextId;
@@ -752,7 +756,7 @@ export class World {
   step(): void {
     this.tick++;
     if (this.tick % 50 === 0) this.checkEra();
-    if (this.tick % 10 === 0) this.updatePower();
+    if (this.tick % 10 === 0) { this.updatePower(); this.updateProfessions(); }
     if (this.waitlist.length && this.tick % 20 === 0) this.admitWaiting();
     if (this.autonomy && this.tick % AUTONOMY_EVERY === 0) this.autonomyStep();
     for (const v of this.villagers) {
@@ -999,6 +1003,7 @@ export class World {
           if (v.carryRes) {
             this.stock[v.carryRes] = Math.min(this.storageCap, this.stock[v.carryRes] + v.carry);
             v.xp += v.carry;
+            this.addSkill(v, v.carryRes, v.carry);
           }
           v.carry = 0;
           v.carryRes = null;
@@ -1050,6 +1055,7 @@ export class World {
       const b = this.buildings.find((x) => x.id === v.targetId);
       if (!b || b.done) { this.resetTask(v); return; }
       b.progress += this.speedFactor();
+      this.addSkill(v, 'build', 0.1);
       if (b.progress >= b.workNeeded) this.finish(b);
       return;
     }
@@ -1636,6 +1642,68 @@ export class World {
       wet += Math.min(1, this.water[this.idx(x, y)]);
     }
     return Math.min(1, wet / POWER_WATER_FULL);
+  }
+
+  // ---------- profissões, líderes e donos ----------
+  private addSkill(v: Villager, job: Job, amount: number): void {
+    v.skill ??= JOBS.map(() => 0);
+    v.skill[JOBS.indexOf(job)] += amount;
+  }
+
+  /** Profissão do viewer: onde ele mais trabalhou (ou a função atual, se ainda não trabalhou). */
+  professionOf(v: Villager): Job {
+    const s = v.skill;
+    if (!s) return v.job;
+    let best = -1;
+    for (let i = 0; i < JOBS.length; i++) if (s[i] > 0 && (best < 0 || s[i] > s[best])) best = i;
+    return best < 0 ? v.job : JOBS[best];
+  }
+
+  isLeader(v: Villager): boolean { return this.leaders[this.professionOf(v)] === v.userId; }
+
+  /** Quem é o dono do estabelecimento, se houver. */
+  ownerOf(b: Building): Villager | undefined { return b.owner ? this.findVillager(b.owner) : undefined; }
+
+  /** Nome do estabelecimento: tipo + viewer dono (ex.: "Fazenda de Ana", "Shopping Ana"). */
+  establishmentName(b: Building): string | undefined {
+    const o = this.ownerOf(b);
+    if (!o || b.kind === 'townhall') return undefined;
+    if (b.kind === 'market') return this.era >= 6 ? `Shopping ${o.name}` : this.era >= 4 ? `Galeria ${o.name}` : `Mercado de ${o.name}`;
+    const base: Record<string, string> = { house: 'Casa', farm: 'Fazenda', well: 'Poço', sawmill: 'Serraria', quarry: 'Pedreira', warehouse: 'Armazém', waterwheel: "Roda d'água", dam: 'Represa' };
+    return `${base[b.kind] ?? BUILDINGS[b.kind as PlaceableKind].label} de ${o.name}`;
+  }
+
+  private static readonly OWNER_JOB: Partial<Record<BuildingKind, Job>> = { farm: 'food', well: 'water', sawmill: 'wood', quarry: 'stone' };
+
+  /** Mantém líderes e donos em dia (a cada 1 s): determinístico, sem sorteio. */
+  private updateProfessions(): void {
+    const byId = (a: Villager, b: Villager): number => a.id - b.id;
+    const vs = [...this.villagers].sort(byId);
+    for (const job of JOBS) {
+      const cur = this.leaders[job] ? this.findVillager(this.leaders[job]!) : undefined;
+      if (cur && this.professionOf(cur) === job) continue;
+      const next = vs.find((v) => this.professionOf(v) === job && (v.skill?.[JOBS.indexOf(job)] ?? 0) > 0);
+      if (next) this.leaders[job] = next.userId; else delete this.leaders[job];
+    }
+    const top = (): Villager | undefined => vs.reduce<Villager | undefined>((m, v) => (!m || v.xp > m.xp ? v : m), undefined);
+    const houseOwners = new Set(this.buildings.filter((b) => b.kind === 'house' && b.owner && this.findVillager(b.owner)).map((b) => b.owner!));
+    for (const b of this.buildings) {
+      if (!b.done || b.kind === 'townhall' || b.kind === 'dam' || (b.owner && this.findVillager(b.owner))) continue;
+      let owner: Villager | undefined;
+      if (b.kind === 'house') owner = vs.find((v) => !houseOwners.has(v.userId));
+      else {
+        const lead = this.leaders[World.OWNER_JOB[b.kind] ?? 'build'];
+        owner = (lead ? this.findVillager(lead) : undefined) ?? top();
+      }
+      if (!owner) { delete b.owner; continue; }
+      b.owner = owner.userId;
+      if (b.kind === 'house') houseOwners.add(owner.userId);
+    }
+  }
+
+  /** Estabelecimentos de um viewer (para o !meus). */
+  establishmentsOf(userId: string): string[] {
+    return this.buildings.filter((b) => b.owner === userId && b.done).map((b) => this.establishmentName(b)!).filter(Boolean);
   }
 
   private updatePower(): void {

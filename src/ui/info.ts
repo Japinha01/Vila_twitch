@@ -14,7 +14,7 @@ export function describeTile(w: World, x: number, y: number): string[] {
   for (const v of w.villagers) {
     if (Math.floor(v.x) !== x || Math.floor(v.y) !== y) continue;
     const load = v.carryRes ? `, carregando ${v.carry} de ${RESOURCE_LABEL[v.carryRes]}` : '';
-    out.push(`👤 ${v.name}: ${JOB_LABEL[v.job]}${load}`);
+    out.push(`👤 ${v.name}: ${JOB_LABEL[v.job]}${load}${w.isLeader(v) ? ` · 👑 líder dos ${JOB_LABEL[w.professionOf(v)]}s` : ` · profissão: ${JOB_LABEL[w.professionOf(v)]}`}`);
   }
 
   const b = w.buildingAt(x, y);
@@ -23,7 +23,9 @@ export function describeTile(w: World, x: number, y: number): string[] {
     if (!b.done) {
       out.push(`🏗 ${label}: em obras ${Math.round((b.progress / b.workNeeded) * 100)}%${b.priority ? ' ★ prioridade' : ''}`);
     } else {
-      out.push(`🏠 ${label}`);
+      const est = w.establishmentName(b);
+      out.push(`🏠 ${est ?? label}`);
+      if (est) out.push(`Dono: ${w.ownerOf(b)!.name}`);
       if (b.flooded) out.push('🌊 Alagado: parado até secar');
       const slots = b.kind === 'townhall' ? undefined : BUILDINGS[b.kind as PlaceableKind].slots;
       if (slots) out.push(`Trabalhadores ${w.workersAt(b)}/${slots}`);
