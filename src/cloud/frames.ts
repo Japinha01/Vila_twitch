@@ -121,9 +121,12 @@ export class OverlayMirror {
       next.push(v);
     }
     w.villagers = next;
-    if (f.b) w.buildings = f.b.map(([id, k, x, y, bw, bh, progress, workNeeded, done, flooded]): Building => ({
-      id, kind: KINDS[k] ?? 'house', x, y, w: bw, h: bh, progress, workNeeded, done: !!done, priority: false, flooded: !!flooded,
-    }));
+    if (f.b) {
+      const owners = new Map(w.buildings.map((b) => [b.id, b.owner])); // o dono só vem nos keyframes
+      w.buildings = f.b.map(([id, k, x, y, bw, bh, progress, workNeeded, done, flooded]): Building => ({
+        id, kind: KINDS[k] ?? 'house', x, y, w: bw, h: bh, progress, workNeeded, done: !!done, priority: false, flooded: !!flooded, owner: owners.get(id),
+      }));
+    }
     if (f.b) w.rebuildBridges();
     if (f.w) {
       const q = fromB64(f.w);

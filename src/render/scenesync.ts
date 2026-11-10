@@ -39,6 +39,7 @@ export class SceneSync {
   names = false;
   private nameSprites = new Map<number, Sprite>();
   private nameTex = new Map<string, CanvasTexture>();
+  private plateSprites = new Map<number, Sprite>();
   // interpolação entre ticks: a simulação anda a 10 passos/s; o vídeo, a 60 quadros/s
   private pos = new Map<number, { fx: number; fy: number; tx: number; ty: number; x: number; y: number }>();
   private lastTick = -1;
@@ -119,6 +120,7 @@ export class SceneSync {
     this.syncVillagers(time);
     this.syncSelection(camera, selectedId);
     this.syncNames();
+    this.syncPlates();
   }
 
   /** Textura do nome (uma por nome, reaproveitada). */
@@ -139,6 +141,56 @@ export class SceneSync {
       if (this.nameTex.size > 400) { for (const [k, v] of this.nameTex) { v.dispose(); this.nameTex.delete(k); if (this.nameTex.size <= 300) break; } }
     }
     return t;
+  }
+
+  /** Letreiro dourado do estabelecimento (tipo + nome do dono). Casas ficam de fora: são muitas. */
+  private plateTexture(text: string): CanvasTexture {
+    const key = `plate:${text}`;
+    let t = this.nameTex.get(key);
+    if (!t) {
+      const c = document.createElement('canvas');
+      c.width = 400; c.height = 64;
+      const g = c.getContext('2d')!;
+      g.fillStyle = 'rgba(20,24,30,0.78)';
+      g.beginPath(); g.roundRect(4, 6, 392, 52, 14); g.fill();
+      g.strokeStyle = '#f2c14e'; g.lineWidth = 3; g.stroke();
+      g.font = 'bold 28px sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = '#ffe9a8';
+      g.fillText(text.slice(0, 28), 200, 33);
+      t = new CanvasTexture(c);
+      this.nameTex.set(key, t);
+    }
+    return t;
+  }
+
+  private syncPlates(): void {
+    const w = this.world;
+    const seen = new Set<number>();
+    let n = 0;
+    for (const b of w.buildings) {
+      if (!b.done || b.kind === 'house' || n >= 40) continue;
+      const text = w.establishmentName(b);
+      if (!text) continue;
+      n++;
+      seen.add(b.id);
+      let sp = this.plateSprites.get(b.id);
+      const tex = this.plateTexture(text);
+      if (!sp) {
+        sp = new Sprite(new SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+        sp.scale.set(2.6, 0.42, 1);
+        sp.renderOrder = 6;
+        this.scene.add(sp);
+        this.plateSprites.set(b.id, sp);
+      } else if ((sp.material as SpriteMaterial).map !== tex) {
+        (sp.material as SpriteMaterial).map = tex;
+        sp.material.needsUpdate = true;
+      }
+      const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      const tall = b.kind === 'market' && w.era >= 4 ? 1.5 : 1.0;
+      sp.position.set(cx, w.groundZ(cx, cy) * HS + tall + 0.9, cy);
+    }
+    for (const [id, sp] of this.plateSprites) if (!seen.has(id)) { this.scene.remove(sp); sp.material.dispose(); this.plateSprites.delete(id); }
   }
 
   private syncNames(): void {

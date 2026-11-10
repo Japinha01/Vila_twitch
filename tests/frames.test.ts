@@ -74,4 +74,15 @@ describe('quadros do overlay', () => {
     m.applyKeyframe(await unpackKeyframe(await packKeyframe(a)));
     expect(m.world!.villagers.length).toBe(a.villagers.length);
   });
+
+  it('o dono do estabelecimento sobrevive aos quadros leves entre keyframes', async () => {
+    const a = busyWorld();
+    for (let i = 0; i < 400; i++) a.step();
+    const farm = a.buildings.find((b) => b.kind === 'farm')!;
+    farm.owner = a.villagers[0].userId;
+    const m = OverlayMirror.fromKeyframe(await unpackKeyframe(await packKeyframe(a)));
+    m.applyLight(makeLight(a, true));
+    expect(m.world!.buildings.find((b) => b.id === farm.id)!.owner).toBe(farm.owner);
+    expect(m.world!.establishmentName(m.world!.buildings.find((b) => b.id === farm.id)!)).toContain('Fazenda');
+  });
 });

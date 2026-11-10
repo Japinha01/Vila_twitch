@@ -310,3 +310,5 @@ Cada viewer tem uma **profissão**: a função em que mais trabalhou (lenhador, 
 
 ## Drenagem de alagamentos
 Se algum prédio fica alagado por duas rodadas de autonomia seguidas, os aldeões cavam um canal da água ao lado dele até terra mais baixa ou o ralo da borda sul, longe de outras construções (o fundo desce 1 nível a cada 6 tiles). Gasta madeira (1 por nível), no máximo 8 canais por vila.
+
+Os estabelecimentos (menos as casas) ganham um **letreiro dourado** com o nome (tipo + dono) no jogo e no overlay do OBS. O dono viaja nos keyframes do overlay e é preservado nos quadros leves.
