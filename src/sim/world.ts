@@ -1252,6 +1252,40 @@ export class World {
     return (this.road[to] ? ROAD_STEP_COST : 1) + jam;
   }
 
+  /**
+   * Rota da caravana (só para o visual): de um ponto longe da vila até uma parada perto da prefeitura, em centros de tile.
+   * Evita prédios (com folga de um tile, a carroça é larga), água e, na primeira tentativa, árvores; prefere estradas.
+   * Devolve null se não houver caminho.
+   */
+  wagonRoute(): { x: number; y: number }[] | null {
+    const hall = this.townHall();
+    const hx = hall.x + hall.w / 2, hy = hall.y + hall.h / 2;
+    const near = (t: number): boolean => {
+      const x = t % GRID_W, y = (t - x) / GRID_W;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < GRID_W && ny < GRID_H && this.blocked[ny * GRID_W + nx]) return true;
+      }
+      return false;
+    };
+    for (const trees of [false, true]) {
+      const open = (t: number): boolean => !this.blocked[t] && !this.dam[t] && (this.water[t] < 0.05 || this.bridge[t] === 1) && !near(t) && (trees || !this.occ[t]);
+      const stops = this.tilesNear(hx, hy + 3, 7).filter(open).sort((a, b) => Math.hypot((a % GRID_W) - hx, Math.floor(a / GRID_W) - hy - 3) - Math.hypot((b % GRID_W) - hx, Math.floor(b / GRID_W) - hy - 3));
+      for (const stop of stops.slice(0, 6)) {
+        const far = (t: number): boolean => Math.hypot((t % GRID_W) - (stop % GRID_W), Math.floor(t / GRID_W) - Math.floor(stop / GRID_W)) >= 16;
+        const path = findPath(stop, far, (a, b) => {
+          if (!open(b)) return Infinity;
+          if (!this.bridge[a] && !this.bridge[b] && Math.abs(this.height[a] - this.height[b]) > 0.6) return Infinity;
+          return (this.road[b] ? 0.6 : 1) + (this.occ[b] ? 6 : 0);
+        });
+        if (!path) continue;
+        const toXY = (t: number): { x: number; y: number } => ({ x: (t % GRID_W) + 0.5, y: Math.floor(t / GRID_W) + 0.5 });
+        return [...path].reverse().map(toXY).concat(toXY(stop));
+      }
+    }
+    return null;
+  }
+
   /** Tiles livres cujo centro está a `reach` do ponto (cx, cy). */
   private tilesNear(cx: number, cy: number, reach: number): number[] {
     const out: number[] = [];

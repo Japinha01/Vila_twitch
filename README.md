@@ -347,3 +347,5 @@ Aldeões ganham **1 🪙 a cada 10 de XP** (`!moedas` mostra o saldo). Com `!eve
 
 ## Visuais dos eventos (3D)
 Cada evento tem efeito na cena e no céu (só visual, em tempo real): ☔ chuva e ⛈ tempestade com gotas, céu escuro e relâmpagos; 🎉 festival com confete; 🌾 colheita com brilhos dourados; 🤒 praga com névoa verde; 🔥 incêndio com chamas e brasas perto do centro; ☄ meteoro riscando o céu, clarão e brasas na cratera; 🐪 caravana com uma carroça que chega, para perto da prefeitura e vai embora; 🧑‍🤝‍🧑 chegada com faíscas sobre a prefeitura. Um cartaz aparece por 6 s quando o evento começa (com o nome de quem resgatou a carta) e uma etiqueta fica no topo enquanto dura. Tudo funciona também no overlay do OBS.
+
+**Caravana:** a carroça agora é um modelo próprio (lona arqueada, carga, condutor, lanterna, rodas com aro e raios, junta de dois bois) e segue uma rota que evita prédios, água e (se possível) árvores, preferindo estradas: chega perto da prefeitura, espera e volta pelo mesmo caminho. Se não houver rota livre, o evento acontece sem a carroça.

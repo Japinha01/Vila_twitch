@@ -1,11 +1,12 @@
 import {
-  AdditiveBlending, BoxGeometry, BufferAttribute, BufferGeometry, Color, CylinderGeometry, Group, LineBasicMaterial, LineSegments,
-  Mesh, MeshLambertMaterial, Points, PointsMaterial, type DirectionalLight, type HemisphereLight, type Scene, type Vector3,
+  AdditiveBlending, BufferAttribute, BufferGeometry, Color, Group, LineBasicMaterial, LineSegments,
+  Points, PointsMaterial, type DirectionalLight, type HemisphereLight, type Scene, type Vector3,
 } from 'three';
 import { GRID_H, GRID_W } from '../sim/config';
 import type { EventKind } from '../sim/events';
 import type { World } from '../sim/world';
 import { HS } from './terrain';
+import { makeWagon, WAGON_WHEEL_R } from './wagon';
 
 /** Cor e escurecimento do céu em cada evento. */
 const TINT: Partial<Record<EventKind, { color: string; mix: number; dim: number }>> = {
@@ -19,6 +20,7 @@ const TINT: Partial<Record<EventKind, { color: string; mix: number; dim: number 
   meteor: { color: '#ffb066', mix: 0.2, dim: 0.1 },
 };
 
+const WAGON_SPEED = 1.8; // tiles por segundo
 const DROPS = 900;
 const MOTES = 520;
 const CONFETTI = ['#ffd43b', '#ff8787', '#74c0fc', '#8ce99a', '#da77f2', '#ffa94d'].map((c) => new Color(c));
@@ -38,6 +40,9 @@ export class EventFx {
   private moteCol = new Float32Array(MOTES * 3);
   private seed = new Float32Array(MOTES * 2);
   private wagon: Group | null = null;
+  private wagonKey = '';
+  private route: { x: number; y: number }[] | null = null;
+  private routeLen = 0;
   private key = '';
   private startedAt = 0;
   private amt = 0;
@@ -170,24 +175,49 @@ export class EventFx {
       (this.motes.geometry.getAttribute('color') as BufferAttribute).needsUpdate = true;
     }
 
-    this.updateWagon(kind === 'caravan', t, hx, hy, gz);
+    if (key !== this.wagonKey) {
+      this.wagonKey = key;
+      this.route = kind === 'caravan' ? this.world.wagonRoute() : null;
+      this.routeLen = 0;
+      if (this.route) for (let i = 1; i < this.route.length; i++) this.routeLen += Math.hypot(this.route[i].x - this.route[i - 1].x, this.route[i].y - this.route[i - 1].y);
+      if (this.wagon && this.route) this.wagon.rotation.y = Math.atan2(-(this.route[1].y - this.route[0].y), this.route[1].x - this.route[0].x);
+    }
+    this.updateWagon(kind === 'caravan', t, gz);
   }
 
-  /** Carroça da caravana: vem do oeste, para perto da prefeitura e depois vai embora. */
-  private updateWagon(active: boolean, t: number, hx: number, hy: number, gz: (x: number, y: number) => number): void {
-    if (!active || t > 50) { if (this.wagon) this.wagon.visible = false; return; }
-    if (!this.wagon) this.wagon = makeWagon(), this.scene.add(this.wagon);
+  /** Carroça da caravana: segue uma rota livre de prédios até perto da prefeitura, espera e volta pelo mesmo caminho. */
+  private updateWagon(active: boolean, t: number, gz: (x: number, y: number) => number): void {
+    if (!active || !this.route || this.route.length < 2) { if (this.wagon) this.wagon.visible = false; return; }
+    const r = this.route, len = this.routeLen;
+    const trip = len / WAGON_SPEED, wait = 14;
+    if (t > trip * 2 + wait) { if (this.wagon) this.wagon.visible = false; return; }
+    if (!this.wagon) { this.wagon = makeWagon(); this.scene.add(this.wagon); this.wagon.rotation.y = Math.atan2(-(r[1].y - r[0].y), r[1].x - r[0].x); }
     const w = this.wagon;
     w.visible = true;
-    const stopX = hx - 4, startX = Math.max(1, hx - 22);
-    const arrive = Math.min(1, t / 18), leave = Math.max(0, (t - 32) / 18);
-    const x = startX + (stopX - startX) * arrive - (stopX - startX) * leave;
-    const y = hy + 3;
-    w.position.set(x, gz(x, y) + 0.05, y);
-    w.rotation.y = leave > 0 ? Math.PI : 0;
-    // 0,3 de raio: a roda gira o que a carroça anda (a ré, quando vai embora, é só a carroça virada)
-    const roll = (arrive < 1 ? arrive * (stopX - startX) : (stopX - startX) + leave * (stopX - startX)) / 0.3;
+    const leaving = t > trip + wait;
+    const travelled = t <= trip ? t * WAGON_SPEED : leaving ? len - (t - trip - wait) * WAGON_SPEED : len; // distância ao longo da rota
+    const at = (d: number): { x: number; y: number } => {
+      let acc = 0;
+      for (let i = 1; i < r.length; i++) {
+        const seg = Math.hypot(r[i].x - r[i - 1].x, r[i].y - r[i - 1].y);
+        if (d <= acc + seg || i === r.length - 1) { const k = Math.min(1, Math.max(0, (d - acc) / (seg || 1))); return { x: r[i - 1].x + (r[i].x - r[i - 1].x) * k, y: r[i - 1].y + (r[i].y - r[i - 1].y) * k }; }
+        acc += seg;
+      }
+      return r[r.length - 1];
+    };
+    const p = at(travelled);
+    const ahead = at(Math.min(len, Math.max(0, travelled + (leaving ? -1.4 : 1.4))));
+    const moving = (!leaving && t <= trip) || (leaving && travelled > 0);
+    if (moving && Math.hypot(ahead.x - p.x, ahead.y - p.y) > 0.01) {
+      const yaw = Math.atan2(-(ahead.y - p.y), ahead.x - p.x);
+      let dy = yaw - w.rotation.y;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      w.rotation.y += dy * 0.12; // vira devagar nas curvas
+    }
+    w.position.set(p.x, gz(p.x, p.y) + 0.04, p.y);
+    const roll = (t <= trip ? t * WAGON_SPEED : leaving ? len + (t - trip - wait) * WAGON_SPEED : len) / WAGON_WHEEL_R;
     w.children.forEach((c) => { if (c.userData.wheel) c.rotation.z = -roll; });
+    (w.userData.legs as Group[]).forEach((leg, i) => { leg.rotation.z = moving ? Math.sin(roll * 1.6 + (i % 2 ? Math.PI : 0)) * 0.35 : 0; });
   }
 
   /** Dá a cor do céu do evento ao sol, ao hemisfério e ao fundo (soma-se ao humor da estação). */
@@ -204,32 +234,4 @@ export class EventFx {
     hemi.intensity += this.flash * 1.4;
     sun.intensity += this.flash * 0.8;
   }
-}
-
-function makeWagon(): Group {
-  const g = new Group();
-  const wood = new MeshLambertMaterial({ color: '#8a5a2b' }), cloth = new MeshLambertMaterial({ color: '#f1e3c0' }), dark = new MeshLambertMaterial({ color: '#3b2a1a' }), fur = new MeshLambertMaterial({ color: '#8d8d8d' });
-  const body = new Mesh(new BoxGeometry(1.6, 0.4, 0.9), wood); body.position.y = 0.55;
-  const cover = new Mesh(new BoxGeometry(1.3, 0.55, 0.8), cloth); cover.position.set(-0.1, 0.98, 0);
-  g.add(body, cover);
-  for (const [x, z] of [[-0.5, 0.5], [0.5, 0.5], [-0.5, -0.5], [0.5, -0.5]]) {
-    // o pivô gira em torno do eixo do carro (z); o disco e os raios ficam dentro dele
-    const pivot = new Group();
-    pivot.position.set(x, 0.3, z);
-    pivot.userData.wheel = true;
-    const disc = new Mesh(new CylinderGeometry(0.3, 0.3, 0.08, 12), dark);
-    disc.rotation.x = Math.PI / 2;
-    const spoke = new Mesh(new BoxGeometry(0.56, 0.1, 0.1), wood);
-    const spoke2 = new Mesh(new BoxGeometry(0.1, 0.56, 0.1), wood);
-    pivot.add(disc, spoke, spoke2);
-    g.add(pivot);
-  }
-  const shaft = new Mesh(new BoxGeometry(0.9, 0.08, 0.1), wood); shaft.position.set(1.05, 0.5, 0);
-  g.add(shaft);
-  const ox = new Mesh(new BoxGeometry(0.9, 0.5, 0.45), fur); ox.position.set(1.5, 0.55, 0);
-  const head = new Mesh(new BoxGeometry(0.35, 0.3, 0.3), fur); head.position.set(2.1, 0.7, 0);
-  g.add(ox, head);
-  g.traverse((o) => { o.castShadow = true; });
-  g.scale.setScalar(1.1);
-  return g;
 }
