@@ -108,8 +108,8 @@ export function waterIndices(): Uint32Array {
   return idx;
 }
 
-const SHALLOW = [0.56, 0.9, 1.0];
-const DEEP = [0.1, 0.4, 0.82];
+const SHALLOW = [0.2, 0.62, 0.95];
+const DEEP = [0.07, 0.3, 0.72];
 
 /**
  * Preenche as quadras de água dos tiles molhados (compactadas no início); devolve quantas.
@@ -120,17 +120,29 @@ export function fillWater(w: World, positions: Float32Array, time: number, color
   let q = 0;
   const depthAt = (x: number, z: number): number => (x < 0 || z < 0 || x >= GRID_W || z >= GRID_H ? 0 : Math.min(w.water[z * GRID_W + x], 2.5));
   const corner = (cx: number, cz: number): number => (depthAt(cx - 1, cz - 1) + depthAt(cx, cz - 1) + depthAt(cx - 1, cz) + depthAt(cx, cz)) / 4;
+  // nível da superfície num canto = média dos tiles molhados que o tocam: tiles vizinhos de alturas diferentes
+  // compartilham os cantos e a água vira uma lâmina contínua, sem buracos nem degraus entre eles
+  const level = (cx: number, cz: number): number => {
+    let sum = 0, n = 0;
+    for (let k = 0; k < 4; k++) {
+      const tx = cx - 1 + (k & 1), tz = cz - 1 + (k >> 1);
+      if (tx < 0 || tz < 0 || tx >= GRID_W || tz >= GRID_H) continue;
+      const t = tz * GRID_W + tx;
+      if (w.water[t] < 0.04) continue;
+      sum += (w.height[t] + Math.min(w.water[t], 2.5)) * HS; n++;
+    }
+    return (n ? sum / n : 0) + Math.sin(time * 1.6 + cx * 0.8 + cz * 0.6) * 0.015;
+  };
   for (let i = 0; i < N; i++) {
     const d = w.water[i];
     if (d < 0.04) continue;
     const x = i % GRID_W, z = (i - x) / GRID_W;
-    const y = (w.height[i] + Math.min(d, 2.5)) * HS + Math.sin(time * 1.6 + x * 0.8 + z * 0.6) * 0.015;
     const o = q * 12;
     const m = 0.012; // quadras vizinhas se sobrepõem um fio, para não aparecer risco entre elas
-    positions[o] = x - m; positions[o + 1] = y; positions[o + 2] = z - m;
-    positions[o + 3] = x + 1 + m; positions[o + 4] = y; positions[o + 5] = z - m;
-    positions[o + 6] = x + 1 + m; positions[o + 7] = y; positions[o + 8] = z + 1 + m;
-    positions[o + 9] = x - m; positions[o + 10] = y; positions[o + 11] = z + 1 + m;
+    positions[o] = x - m; positions[o + 1] = level(x, z); positions[o + 2] = z - m;
+    positions[o + 3] = x + 1 + m; positions[o + 4] = level(x + 1, z); positions[o + 5] = z - m;
+    positions[o + 6] = x + 1 + m; positions[o + 7] = level(x + 1, z + 1); positions[o + 8] = z + 1 + m;
+    positions[o + 9] = x - m; positions[o + 10] = level(x, z + 1); positions[o + 11] = z + 1 + m;
     if (colors) {
       const c = q * 16;
       for (let k = 0; k < 4; k++) {
@@ -138,9 +150,9 @@ export function fillWater(w: World, positions: Float32Array, time: number, color
         const dep = corner(cx, cz);
         const t = Math.min(1, dep / 1.6);
         // faixas de brilho que correm pela superfície (duas ondas cruzadas)
-        const sh = Math.max(0, Math.sin(time * 1.3 + cx * 1.7 + cz * 0.9) * Math.sin(time * 0.9 - cx * 0.8 + cz * 1.5)) * 0.22 * (1 - t * 0.5);
+        const sh = Math.max(0, Math.sin(time * 1.3 + cx * 1.7 + cz * 0.9) * Math.sin(time * 0.9 - cx * 0.8 + cz * 1.5)) * 0.12 * (1 - t * 0.5);
         for (let ch = 0; ch < 3; ch++) colors[c + k * 4 + ch] = Math.min(1, SHALLOW[ch] + (DEEP[ch] - SHALLOW[ch]) * t + sh);
-        colors[c + k * 4 + 3] = Math.min(0.9, 0.3 + dep * 1.3);
+        colors[c + k * 4 + 3] = Math.min(0.95, 0.68 + dep * 0.9);
       }
     }
     q++;
