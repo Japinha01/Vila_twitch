@@ -8,6 +8,7 @@ describe('ferramentas', () => {
   it('fabrica machados e picaretas gastando madeira e pedra, até um por aldeão', () => {
     const w = new World(5);
     w.autonomy = true;
+    w.npcsOn = false;
     for (let i = 0; i < 3; i++) w.addVillager(`u${i}`, `V${i}`, '#fff');
     w.stock.wood = 400; w.stock.stone = 200; w.stock.food = 400; w.stock.water = 400;
     run(w, AUTONOMY_EVERY * 40);

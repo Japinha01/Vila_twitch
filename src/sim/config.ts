@@ -145,3 +145,7 @@ export const POWER_SUPPLY = [10, 10, 10, 20, 20, 35, 35, 60]; // por roda, por e
 export const POWER_DEMAND: Partial<Record<'sawmill' | 'quarry' | 'market', number>> = { sawmill: 4, quarry: 6, market: 3 };
 export const POWER_BONUS = 0.5; // +50% de rendimento com energia plena
 export const POWER_WATER_FULL = 3; // tiles de água (profundidade >= 1) em volta para a roda render 100%
+
+export const NPC_MIN = 6; // NPCs permitidos mesmo sem viewers; depois, no máximo o número de viewers
+export const NPC_EVERY = 3; // um NPC novo a cada N rodadas de autonomia (~30 s), se a vila precisar
+export const NPC_NAMES = ['Joana', 'Tiago', 'Marta', 'Bento', 'Lia', 'Caio', 'Rita', 'Davi', 'Nina', 'Otto', 'Vera', 'Hugo', 'Alma', 'Teo', 'Lara', 'Beto'];

@@ -312,3 +312,6 @@ Cada viewer tem uma **profissão**: a função em que mais trabalhou (lenhador, 
 Se algum prédio fica alagado por duas rodadas de autonomia seguidas, os aldeões cavam um canal da água ao lado dele até terra mais baixa ou o ralo da borda sul, longe de outras construções (o fundo desce 1 nível a cada 6 tiles). Gasta madeira (1 por nível), no máximo 8 canais por vila.
 
 Os estabelecimentos (menos as casas) ganham um **letreiro dourado** com o nome (tipo + dono) no jogo e no overlay do OBS. O dono viaja nos keyframes do overlay e é preservado nos quadros leves.
+
+## Moradores NPC
+Quando a população está abaixo da meta da próxima era, há casa livre, ninguém espera na fila e comida e água estão acima de 30%, chega um **NPC** (a cada ~30 s). Nunca há mais NPCs do que viewers (mínimo 6, para a vila crescer mesmo com o chat vazio). NPCs trabalham sozinhos e contam na população, mas não lideram profissões nem têm estabelecimentos. **Viewer tem prioridade**: com a vila cheia, um NPC sai para dar a vaga (também para quem está na fila). Os aldeões agora nascem fora de prédios e de água funda.

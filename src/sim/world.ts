@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, DIG_COST, NPC_EVERY, NPC_MIN, NPC_NAMES, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, WAITLIST_MAX, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -130,6 +130,7 @@ export class World {
   private roadAnnounced = false;
   private baseSources = 0; // nascentes geradas com o mapa (rio e lagos)
   private springs: number[] = []; // nascentes criadas pelo streamer
+  npcsOn = true; // moradores NPC "se preciso"
   waitlistOn = true; // com a vila cheia, quem usa !entrar entra na fila em vez de ser recusado
   waitlist: { userId: string; name: string; color: string }[] = [];
   /** energia das rodas d'água: oferta, demanda e a razão (0 a 1) que vira bônus nos prédios movidos a ela */
@@ -639,14 +640,23 @@ export class World {
 
   addVillager(userId: string, name: string, color: string): AddResult {
     if (this.findVillager(userId)) return { ok: false, reason: 'exists' };
-    if (this.villagers.length >= this.popCap) return { ok: false, reason: 'full' };
+    if (this.villagers.length >= this.popCap && !this.makeRoomForViewer()) return { ok: false, reason: 'full' };
     const hall = this.townHall();
-    const a = this.rng() * Math.PI * 2;
     const prof = this.profiles.get(userId);
+    // nasce perto da prefeitura, mas fora de prédios e fora d'água funda (a vila cresce em volta dela)
+    let sx = 0, sy = 0;
+    for (let k = 0; k < 24; k++) {
+      const a = this.rng() * Math.PI * 2, r = 2.3 + Math.floor(k / 4) * 0.7;
+      sx = hall.x + hall.w / 2 + Math.cos(a) * r;
+      sy = hall.y + hall.h / 2 + Math.sin(a) * r;
+      const tx = Math.floor(sx), ty = Math.floor(sy);
+      if (tx < 0 || ty < 0 || tx >= GRID_W || ty >= GRID_H) continue;
+      if (!this.buildingAt(tx, ty) && this.walkable(this.idx(tx, ty))) break;
+    }
     const v: Villager = {
       id: this.nextId++, userId, name, color,
-      x: hall.x + hall.w / 2 + Math.cos(a) * 2.3,
-      y: hall.y + hall.h / 2 + Math.sin(a) * 2.3,
+      x: sx,
+      y: sy,
       job: prof?.job ?? this.neediestResource(), state: 'idle', targetId: null,
       carry: 0, carryRes: null, workLeft: 0, xp: prof?.xp ?? 0, path: null, pi: 0, wait: 0,
     };
@@ -674,7 +684,7 @@ export class World {
   /** Chama quem está na fila enquanto houver vaga. */
   private admitWaiting(): void {
     let n = 0;
-    while (this.waitlist.length && this.villagers.length < this.popCap) {
+    while (this.waitlist.length && (this.villagers.length < this.popCap || this.makeRoomForViewer())) {
       const q = this.waitlist.shift()!;
       if (this.addVillager(q.userId, q.name, q.color).ok) n++;
     }
@@ -682,6 +692,38 @@ export class World {
   }
 
   /** Remove um aldeão (streamer ou moderador). Ele pode voltar com !entrar. */
+  /** Viewer tem prioridade: com a vila cheia, um morador NPC dá lugar a ele. */
+  private makeRoomForViewer(): boolean {
+    for (let i = this.villagers.length - 1; i >= 0; i--) {
+      if (!this.villagers[i].npc) continue;
+      const v = this.villagers[i];
+      for (const b of this.buildings) if (b.owner === v.userId) delete b.owner;
+      this.villagers.splice(i, 1);
+      return true;
+    }
+    return false;
+  }
+
+  get npcCount(): number { return this.villagers.filter((v) => v.npc).length; }
+
+  /**
+   * Moradores NPC "se preciso": quando falta gente para a meta de população da próxima era, há casa livre,
+   * ninguém espera na fila e a vila se sustenta, chega um NPC. Nunca mais NPCs do que viewers (mínimo NPC_MIN).
+   */
+  private autoNpc(): void {
+    if (!this.npcsOn || (this.tick / AUTONOMY_EVERY) % NPC_EVERY !== 0) return;
+    const next = ERAS[this.era + 1];
+    const popGoal = next?.goals.find((g) => g.label === 'aldeões')?.need;
+    if (!popGoal || this.waitlist.length || this.villagers.length >= this.popCap || this.villagers.length >= popGoal) return;
+    const viewers = this.villagers.length - this.npcCount;
+    if (this.npcCount >= Math.max(NPC_MIN, viewers)) return;
+    const cap = this.storageCap;
+    if (this.stock.food / cap < 0.3 || this.stock.water / cap < 0.3) return;
+    const id = this.nextId;
+    const r = this.addVillager(`npc:${id}`, NPC_NAMES[id % NPC_NAMES.length], World.colorFor(`npc:${id}`));
+    if (r.ok) r.villager.npc = true;
+  }
+
   removeVillager(userId: string): boolean {
     const i = this.villagers.findIndex((v) => v.userId === userId);
     if (i < 0) return false;
@@ -1366,6 +1408,7 @@ export class World {
     this.autoJobs();
     this.autoPlan();
     this.autoCraft();
+    this.autoNpc();
     if (this.buildings.some((b) => b.done && b.flooded && b.kind !== 'townhall' && b.kind !== 'dam' && b.kind !== 'bridge')) {
       if (++this.floodRounds >= AUTO_DRAIN_ROUNDS && this.autoDrain()) this.floodRounds = 0;
     } else this.floodRounds = 0;
@@ -1750,7 +1793,7 @@ export class World {
   /** Mantém líderes e donos em dia (a cada 1 s): determinístico, sem sorteio. */
   private updateProfessions(): void {
     const byId = (a: Villager, b: Villager): number => a.id - b.id;
-    const vs = [...this.villagers].sort(byId);
+    const vs = this.villagers.filter((v) => !v.npc).sort(byId);
     for (const job of JOBS) {
       const cur = this.leaders[job] ? this.findVillager(this.leaders[job]!) : undefined;
       if (cur && this.professionOf(cur) === job) continue;
