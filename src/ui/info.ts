@@ -14,7 +14,7 @@ export function describeTile(w: World, x: number, y: number): string[] {
   for (const v of w.villagers) {
     if (Math.floor(v.x) !== x || Math.floor(v.y) !== y) continue;
     const load = v.carryRes ? `, carregando ${v.carry} de ${RESOURCE_LABEL[v.carryRes]}` : '';
-    out.push(`👤 ${v.name}: ${JOB_LABEL[v.job]}${load}${w.isLeader(v) ? ` · 👑 líder dos ${JOB_LABEL[w.professionOf(v)]}s` : ` · profissão: ${JOB_LABEL[w.professionOf(v)]}`}`);
+    out.push(`👤 ${v.name}${v.npc ? ' (NPC)' : ''}: ${JOB_LABEL[v.job]}${load}${v.npc ? '' : w.isLeader(v) ? ` · 👑 líder dos ${JOB_LABEL[w.professionOf(v)]}s` : ` · profissão: ${JOB_LABEL[w.professionOf(v)]}`}`);
   }
 
   const b = w.buildingAt(x, y);

@@ -54,6 +54,8 @@ export interface Villager {
   ordered?: boolean;
   /** experiência por profissão, na ordem de JOBS: a maior define a profissão do viewer */
   skill?: number[];
+  /** morador NPC: completa a população quando preciso; sai quando um viewer precisa da vaga */
+  npc?: boolean;
 }
 
 export const JOBS: Job[] = ['wood', 'stone', 'food', 'water', 'build'];
