@@ -4,6 +4,7 @@ import { isValidToken, OverlayViewer, type ViewerHandlers } from './cloud/overla
 import { Renderer } from './render/renderer';
 import type { GameView } from './render/view';
 import { EraBanner, eraLine } from './ui/erabanner';
+import { EventBanner } from './ui/eventbanner';
 
 const ICON = { wood: '🪵', stone: '🪨', food: '🍎', water: '💧' } as const;
 
@@ -32,6 +33,7 @@ export async function runOverlay(
 
   let mirror: OverlayMirror | null = null;
   let eraBanner: EraBanner | null = null;
+  let eventBanner: EventBanner | null = null;
   let view: GameView | null = null;
   let lastFrame = 0;
 
@@ -119,6 +121,7 @@ export async function runOverlay(
       if (!mirror) {
         mirror = OverlayMirror.fromKeyframe(save);
         eraBanner = new EraBanner(mirror.world!, document.getElementById('stage')!);
+        eventBanner = new EventBanner(mirror.world!, document.getElementById('stage')!);
         void startView(mirror).then(() => { say(''); requestAnimationFrame(frame); });
       } else mirror.applyKeyframe(save);
     },
@@ -151,6 +154,7 @@ export async function runOverlay(
       view.setNames?.(mirror.options.names);
       drawHud(mirror);
       eraBanner?.update();
+      eventBanner?.update();
       view.draw();
       say(now - lastFrame > 15000 ? 'Sem sinal do jogo do streamer…' : '');
     }

@@ -6,6 +6,7 @@ import {
 import { BUILDINGS, GRID_H, GRID_W } from '../sim/config';
 import type { World } from '../sim/world';
 import { makeBuilding } from './models';
+import { EventFx } from './eventfx';
 import { SceneSync } from './scenesync';
 import { buildTerrain, fillWater, HS, paintTops, waterIndices } from './terrain';
 import type { CameraState, GameView, Ghost } from './view';
@@ -40,6 +41,7 @@ export class Renderer3D implements GameView {
   private mood = 0; // 0 = temperada, 1 = seca (suavizado)
   private overlays: Mesh[] = []; // quadras de destaque (prévia de obra e mouse)
   private sync: SceneSync;
+  private fx: EventFx;
   private ghostModel: Group | null = null;
   private ghostKey = '';
 
@@ -78,6 +80,7 @@ export class Renderer3D implements GameView {
     this.buildWater();
     this.rebuildTerrain();
     this.sync = new SceneSync(this.scene, world);
+    this.fx = new EventFx(this.scene, world);
     for (let i = 0; i < 6; i++) {
       const m = new Mesh(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new MeshBasicMaterial({ transparent: true, opacity: 0.5, side: DoubleSide, depthWrite: false }));
       m.visible = false;
@@ -266,6 +269,8 @@ export class Renderer3D implements GameView {
     (this.water.geometry.getAttribute('color') as BufferAttribute).needsUpdate = true;
 
     this.updateMood();
+    this.fx.update(now, this.target);
+    this.fx.applyLight(this.sun, this.hemi, this.scene.background as Color | null);
     this.updateOverlays();
     this.gl.render(this.scene, this.camera);
   }

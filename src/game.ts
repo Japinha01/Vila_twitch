@@ -7,6 +7,7 @@ import { parseSeed, randomSeed } from './sim/seed';
 import { startTicker } from './ticker';
 import { World } from './sim/world';
 import { EraBanner, eraLine } from './ui/erabanner';
+import { EventBanner } from './ui/eventbanner';
 import { Panel } from './ui/panel';
 import { initCloudPanel } from './ui/cloudpanel';
 import { initOverlayPanel } from './ui/overlaypanel';
@@ -24,12 +25,9 @@ const takeNextSeed = (): number | null => {
 const world = loaded ?? new World(takeNextSeed() ?? randomSeed());
 const chat = new CommandProcessor(world, { now: () => performance.now() });
 let canvas = document.getElementById('game') as HTMLCanvasElement;
-// Visual: 3D low poly por padrão; ?2d (ou o botão do painel) usa o isométrico 2D.
-// A escolha fica salva no navegador; se o WebGL falhar, cai sozinho para o 2D.
+// Visual: sempre 3D (low poly). O 2D só entra sozinho se o WebGL falhar (ou com ?2d, para depurar).
 const params = new URLSearchParams(location.search);
-const PREF_KEY = 'vila-do-chat:visual';
-const readPref = (): string | null => { try { return localStorage.getItem(PREF_KEY); } catch { return null; } };
-let mode: '2d' | '3d' = params.has('2d') ? '2d' : params.has('3d') ? '3d' : readPref() === '2d' ? '2d' : '3d';
+let mode: '2d' | '3d' = params.has('2d') ? '2d' : '3d';
 let r3: GameView | undefined;
 if (mode === '3d') {
   try {
@@ -45,16 +43,6 @@ if (mode === '3d') {
   }
 }
 const renderer: GameView = r3 ?? new Renderer(canvas, world);
-const visualBtn = document.getElementById('visual') as HTMLButtonElement;
-visualBtn.textContent = mode === '3d' ? '🧊 3D' : '🗺 2D';
-visualBtn.title = 'Alternar entre o visual 3D e o 2D';
-visualBtn.addEventListener('click', () => {
-  try { localStorage.setItem(PREF_KEY, mode === '3d' ? '2d' : '3d'); } catch { /* sem armazenamento: vale só para esta aba */ }
-  saveGame(world); // mantém o progresso ao recarregar
-  const u = new URL(location.href);
-  u.searchParams.delete('2d'); u.searchParams.delete('3d');
-  location.href = u.toString();
-});
 // Qualidade gráfica (só no 3D): botão cicla Alta → Média → Baixa; se ficar pesado, baixa sozinha.
 const QUALITY_KEY = 'vila-do-chat:qualidade';
 const QUALITY_NAMES = ['Baixa', 'Média', 'Alta'];
@@ -73,6 +61,7 @@ if (renderer.setQuality) {
 } else qualityBtn.hidden = true;
 const panel = new Panel(world, chat, renderer);
 const eraBanner = new EraBanner(world, document.getElementById('stage')!);
+const eventBanner = new EventBanner(world, document.getElementById('stage')!);
 const eraEl = document.getElementById('eraline')!;
 
 // ---- salvar: automático a cada 30 s, ao sair da aba e pelo botão ----
@@ -157,6 +146,7 @@ function frame(): void {
   }
   panel.update();
   eraBanner.update();
+  eventBanner.update();
   const el = eraLine(world);
   if (eraEl.textContent !== el) eraEl.textContent = el;
   requestAnimationFrame(frame);

@@ -88,3 +88,12 @@ h2.sub { margin: 10px 0 6px; font-size: 13px; }
 #paint button.on, #terrain button.on { background: #f08c00; color: #fff; }
 #cardqueue .rk { font-size: 12px; padding: 2px 0; }
 #cardqueue button { margin-left: 4px; padding: 0 6px; }
+
+#eventtoast { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 26px; border-radius: 18px; background: rgba(20,26,30,.8); border: 2px solid #74c0fc; color: #fff; text-align: center; text-shadow: 0 2px 6px #000; pointer-events: none; z-index: 19; max-width: 70%; opacity: 0; }
+#eventtoast[hidden], #eventchip[hidden] { display: none; }
+#eventtoast.show { animation: evPop 6s ease-out forwards; }
+#eventtoast .evicon { font-size: 44px; line-height: 1; }
+#eventtoast b { font-size: 24px; }
+#eventtoast span { font-size: 14px; opacity: .92; }
+@keyframes evPop { 0% { opacity: 0; transform: translate(-50%, -14px); } 8% { opacity: 1; transform: translate(-50%, 0); } 85% { opacity: 1; } 100% { opacity: 0; } }
+#eventchip { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); padding: 4px 14px; border-radius: 999px; background: rgba(20,26,30,.75); border: 1px solid #74c0fc; color: #fff; font-size: 13px; pointer-events: none; z-index: 18; }
