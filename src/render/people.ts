@@ -1,13 +1,15 @@
 import {
-  BoxGeometry, BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute, IcosahedronGeometry, InstancedMesh,
-  MeshLambertMaterial, Object3D, SphereGeometry, type Scene,
+  BoxGeometry, BufferGeometry, type Camera, CircleGeometry, Color, CylinderGeometry, DynamicDrawUsage, Float32BufferAttribute,
+  InstancedBufferAttribute, InstancedBufferGeometry, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry,
+  SRGBColorSpace, ShaderMaterial, type Scene, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { Job, Resource, Villager } from '../sim/types';
+import type { Resource, Villager } from '../sim/types';
 import { JOBS } from '../sim/types';
 import type { World } from '../sim/world';
 import { HAIRS, HATS, SHIRTS, SKINS, visibleLook, type HatId } from '../sim/looks';
 import { HS } from './terrain';
+import { SPRITE_FRAG, SPRITE_VERT, makeAtlas } from './sprites';
 
 const MAX = 600;
 const SKIN = SKINS.slice(0, 6).map((s) => s.color);
@@ -52,59 +54,68 @@ function hatGeometry(id: HatId): BufferGeometry {
   return mergeGeometries(parts)!;
 }
 
-/** Ferramenta de cada função, com a ponta de pé em y = 0 (a mão segura o meio do cabo). */
-function toolGeometry(job: Job): BufferGeometry {
-  const handle = paint(new BoxGeometry(0.022, 0.3, 0.022).translate(0, 0.02, 0), '#7a5230');
-  const parts: BufferGeometry[] = [handle];
-  switch (job) {
-    case 'wood': parts.push(paint(new BoxGeometry(0.1, 0.07, 0.025).translate(0.05, 0.14, 0), '#9aa3ab')); break; // machado
-    case 'stone': parts.push(paint(new BoxGeometry(0.16, 0.03, 0.03).translate(0, 0.16, 0), '#868e96')); break; // picareta
-    case 'food': parts.push(paint(new BoxGeometry(0.09, 0.03, 0.025).translate(0.045, 0.16, 0), '#c0c6cc')); break; // enxada
-    case 'water': parts.push(paint(new CylinderGeometry(0.05, 0.04, 0.07, 8).translate(0, -0.13, 0), '#339af0')); break; // balde
-    default: parts.push(paint(new BoxGeometry(0.08, 0.055, 0.055).translate(0.02, 0.16, 0), '#5c6770')); // martelo
-  }
-  return mergeGeometries(parts)!;
-}
-
 /**
- * Aldeões em instâncias (poucas chamadas de desenho para centenas de gente): pernas que andam, torso na cor do viewer,
- * cabeça e cabelo variados, ferramenta da função na mão e uma coroa dourada para líder de profissão.
+ * Aldeões em estilo HD-2D (Octopath): sprites pixel art em pé, sempre de frente para a câmera, num mapa 3D.
+ * Um único draw call para todos: o shader troca pele, cabelo, camisa e calça pela cor de cada viewer.
+ * Chapéu, coroa, carga e sombra seguem em 3D simples por cima do sprite.
  */
+const PX = 0.0275; // tamanho de um pixel do sprite no mundo
+const BODY_H = 24 * PX;
+
 export class People {
-  private torso: InstancedMesh;
-  private legs: InstancedMesh;
-  private heads: InstancedMesh;
-  private hair: InstancedMesh;
+  private sprites: Mesh;
+  private shadows: InstancedMesh;
   private crowns: InstancedMesh;
   private loads: InstancedMesh;
-  private tools: InstancedMesh[];
   private hats: InstancedMesh[];
+  private attr: Record<'off' | 'cell' | 'flip' | 'scale' | 'skin' | 'hair' | 'shirt' | 'pants', InstancedBufferAttribute>;
+  private uniforms = { uMap: { value: makeAtlas() }, uRight: { value: new Vector3(1, 0, 0) }, uPx: { value: PX }, uTint: { value: new Color(1, 1, 1) } };
+  private right = new Vector3(1, 0, 0);
   private d = new Object3D();
   private tmp = new Color();
   private cols = new Map<string, { sig: string; shirt: Color; pants: Color; skin: Color; hair: Color }>();
-  private face = new Map<number, { x: number; y: number; a: number }>();
+  private face = new Map<number, { x: number; y: number; s: number }>();
   private spread = new Map<number, { x: number; y: number }>(); // afastamento suave entre aldeões que dividem o tile
   private lastTime = 0;
 
   constructor(scene: Scene) {
-    const lambert = (): MeshLambertMaterial => new MeshLambertMaterial({ flatShading: true });
-    this.torso = new InstancedMesh(new CylinderGeometry(0.1, 0.125, 0.23, 6), lambert(), MAX);
-    this.legs = new InstancedMesh(new BoxGeometry(0.065, 0.17, 0.07).translate(0, -0.085, 0), lambert(), MAX * 2);
-    this.heads = new InstancedMesh(new IcosahedronGeometry(0.088, 0), lambert(), MAX);
-    this.hair = new InstancedMesh(new SphereGeometry(0.094, 6, 4, 0, Math.PI * 2, 0, Math.PI * 0.55), lambert(), MAX);
+    const geo = new InstancedBufferGeometry();
+    const quad = new PlaneGeometry(1, 1).translate(0.5, 0.5, 0);
+    geo.setAttribute('position', quad.getAttribute('position'));
+    geo.setIndex(quad.getIndex());
+    const mk = (n: number): InstancedBufferAttribute => {
+      const a = new InstancedBufferAttribute(new Float32Array(MAX * n), n);
+      a.setUsage(DynamicDrawUsage);
+      return a;
+    };
+    this.attr = { off: mk(3), cell: mk(2), flip: mk(1), scale: mk(1), skin: mk(3), hair: mk(3), shirt: mk(3), pants: mk(3) };
+    geo.setAttribute('aOff', this.attr.off); geo.setAttribute('aCell', this.attr.cell); geo.setAttribute('aFlip', this.attr.flip);
+    geo.setAttribute('aScale', this.attr.scale); geo.setAttribute('aSkin', this.attr.skin); geo.setAttribute('aHair', this.attr.hair);
+    geo.setAttribute('aShirt', this.attr.shirt); geo.setAttribute('aPants', this.attr.pants);
+    geo.instanceCount = 0;
+    this.sprites = new Mesh(geo, new ShaderMaterial({ uniforms: this.uniforms, vertexShader: SPRITE_VERT, fragmentShader: SPRITE_FRAG }));
+    this.sprites.frustumCulled = false;
+    scene.add(this.sprites);
+
+    this.shadows = new InstancedMesh(new CircleGeometry(0.17, 10).rotateX(-Math.PI / 2),
+      new MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.28, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), MAX);
     this.crowns = new InstancedMesh(new CylinderGeometry(0.075, 0.06, 0.06, 6), new MeshLambertMaterial({ color: '#ffd43b', flatShading: true, emissive: '#6b5200' }), MAX);
-    this.loads = new InstancedMesh(new BoxGeometry(0.11, 0.11, 0.11), lambert(), MAX);
+    this.loads = new InstancedMesh(new BoxGeometry(0.11, 0.11, 0.11), new MeshLambertMaterial({ flatShading: true }), MAX);
     const toolMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-    this.tools = JOBS.map((j) => new InstancedMesh(toolGeometry(j), toolMat, MAX));
     this.hats = HATS.map((h) => new InstancedMesh(hatGeometry(h.id), toolMat, MAX));
-    for (const m of [this.torso, this.legs, this.heads, this.hair, this.crowns, this.loads, ...this.tools, ...this.hats]) {
+    for (const m of [this.shadows, this.crowns, this.loads, ...this.hats]) {
       m.count = 0;
       m.frustumCulled = false;
-      m.castShadow = true;
       scene.add(m);
     }
-    this.heads.castShadow = this.hair.castShadow = this.loads.castShadow = false;
     this.d.rotation.order = 'YXZ';
+  }
+
+  /** Câmera e luz do quadro: o sprite é de frente para a câmera e escurece/esquenta com o clima. */
+  setView(camera: Camera, tint: Color): void {
+    this.right.setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize();
+    this.uniforms.uRight.value.copy(this.right);
+    this.uniforms.uTint.value.copy(tint);
   }
 
   private colorsFor(v: Villager): { shirt: Color; pants: Color; skin: Color; hair: Color } {
@@ -113,13 +124,14 @@ export class People {
     let c = this.cols.get(v.userId);
     if (!c || c.sig !== sig) {
       const h = hashStr(v.userId);
-      const shirt = new Color(l?.shirt !== undefined ? SHIRTS[l.shirt].color : v.color);
+      const srgb = (hex: string, k = 1): Color => { const o = new Color(); new Color(hex).getRGB(o, SRGBColorSpace); return o.multiplyScalar(k); };
+      const shirt = l?.shirt !== undefined ? SHIRTS[l.shirt].color : v.color;
       c = {
         sig,
-        shirt,
-        pants: shirt.clone().multiplyScalar(0.45),
-        skin: new Color(l?.skin !== undefined ? SKINS[l.skin].color : SKIN[h % SKIN.length]),
-        hair: new Color(l?.hair !== undefined ? HAIRS[l.hair].color : v.npc ? '#8a8f94' : HAIR[(h >>> 5) % HAIR.length]),
+        shirt: srgb(shirt),
+        pants: srgb(shirt, 0.55),
+        skin: srgb(l?.skin !== undefined ? SKINS[l.skin].color : SKIN[h % SKIN.length]),
+        hair: srgb(l?.hair !== undefined ? HAIRS[l.hair].color : v.npc ? '#8a8f94' : HAIR[(h >>> 5) % HAIR.length]),
       };
       this.cols.set(v.userId, c);
       if (this.cols.size > 2500) this.cols.clear();
@@ -130,7 +142,6 @@ export class People {
   update(world: World, time: number, at: (v: Villager) => { x: number; y: number }): void {
     const list = world.villagers.slice(0, MAX);
     const d = this.d;
-    const toolCount = JOBS.map(() => 0);
     const hatCount = HATS.map(() => 0);
     // quem divide o tile se espalha em espiral (só visual); o afastamento anda suave para ninguém "pular"
     const dt = Math.min(0.1, Math.max(0, time - this.lastTime));
@@ -145,6 +156,8 @@ export class People {
       seen.set(cell, k + 1);
       rank.set(v.id, k);
     }
+    const A = this.attr;
+    const rx = this.right.x, rz = this.right.z;
     list.forEach((v, i) => {
       const base = at(v);
       const slot = rank.get(v.id) ?? 0;
@@ -157,65 +170,52 @@ export class People {
       const q = { x: base.x + o.x, y: base.y + o.y };
       const moving = v.state === 'toTarget' || v.state === 'toStore';
       const working = v.state === 'working';
-      // direção do corpo: para onde ele andou por último
+      // lado para onde olha: o último movimento projetado no eixo da câmera (direita = +1)
       let f = this.face.get(v.id);
-      if (!f) { f = { x: base.x, y: base.y, a: (v.id * 2.399) % (Math.PI * 2) }; this.face.set(v.id, f); }
+      if (!f) { f = { x: base.x, y: base.y, s: v.id % 2 ? 1 : -1 }; this.face.set(v.id, f); }
       const dx = base.x - f.x, dy = base.y - f.y;
-      if (dx * dx + dy * dy > 1e-6) f.a = Math.atan2(dx, dy);
+      if (dx * dx + dy * dy > 1e-6) { const side = dx * rx + dy * rz; if (Math.abs(side) > 1e-4) f.s = side > 0 ? 1 : -1; }
       f.x = base.x; f.y = base.y;
-      const phase = time * 10 + v.id;
-      const bob = moving ? Math.abs(Math.sin(phase)) * 0.03 : working ? Math.sin(time * 12 + v.id) * 0.015 : 0;
-      const y = world.groundZ(q.x, q.y) * HS + bob;
+      const bob = moving ? Math.abs(Math.sin(time * 10 + v.id)) * 0.025 : 0;
+      const y = world.groundZ(q.x, q.y) * HS;
       const c = this.colorsFor(v);
-      const cs = Math.cos(f.a), sn = Math.sin(f.a);
       const sc = v.kid ? 0.68 : 1;
-      const at3 = (lx: number, ly: number, lz: number): void => { d.position.set(q.x + (cs * lx + sn * lz) * sc, y + ly * sc, q.y + (-sn * lx + cs * lz) * sc); };
+      const frame = working ? 3 + (Math.floor(time * 3.5 + v.id) & 1) : moving ? 1 + (Math.floor(time * 6 + v.id) & 1) : 0;
+      const ji = Math.max(0, JOBS.indexOf(v.job));
 
+      A.off.setXYZ(i, q.x, y + bob, q.y);
+      A.cell.setXY(i, frame, ji);
+      A.flip.setX(i, f.s);
+      A.scale.setX(i, sc);
+      A.skin.setXYZ(i, c.skin.r, c.skin.g, c.skin.b);
+      A.hair.setXYZ(i, c.hair.r, c.hair.g, c.hair.b);
+      A.shirt.setXYZ(i, c.shirt.r, c.shirt.g, c.shirt.b);
+      A.pants.setXYZ(i, c.pants.r, c.pants.g, c.pants.b);
+
+      d.rotation.set(0, 0, 0);
       d.scale.setScalar(sc);
-      d.rotation.set(0, f.a, 0);
-      at3(0, 0.285, 0); d.updateMatrix(); this.torso.setMatrixAt(i, d.matrix); this.torso.setColorAt(i, c.shirt);
-      at3(0, 0.46, 0); d.updateMatrix(); this.heads.setMatrixAt(i, d.matrix); this.heads.setColorAt(i, c.skin);
-      at3(0, 0.465, -0.012); d.updateMatrix(); this.hair.setMatrixAt(i, d.matrix); this.hair.setColorAt(i, c.hair);
+      d.position.set(q.x, y + 0.01, q.y); d.updateMatrix(); this.shadows.setMatrixAt(i, d.matrix);
+
       const look = visibleLook(v.look, v.xp);
       const hi = look?.hat ? HATS.findIndex((h) => h.id === look.hat) : -1;
       const crown = !v.npc && world.isLeader(v);
-      at3(0, 0.575, 0); d.scale.setScalar(crown && hi < 0 ? sc : 0.0001); d.updateMatrix(); this.crowns.setMatrixAt(i, d.matrix);
+      const top = y + bob + (BODY_H - 0.015) * sc;
+      d.position.set(q.x, top + 0.02 * sc, q.y); d.scale.setScalar(crown && hi < 0 ? sc : 0.0001); d.updateMatrix(); this.crowns.setMatrixAt(i, d.matrix);
       d.scale.setScalar(sc);
-
       if (hi >= 0) {
-        const hm = this.hats[hi];
-        d.rotation.set(0, f.a, 0);
-        at3(0, 0.535, -0.008); d.updateMatrix(); hm.setMatrixAt(hatCount[hi]++, d.matrix);
-        d.rotation.set(0, f.a, 0);
+        d.position.set(q.x, top - 0.03 * sc, q.y); d.updateMatrix(); this.hats[hi].setMatrixAt(hatCount[hi]++, d.matrix);
       }
-      const swing = moving ? Math.sin(phase) * 0.7 : 0;
-      for (let s = -1; s <= 1; s += 2) {
-        d.rotation.set(swing * s, f.a, 0);
-        at3(0.045 * s, 0.17, 0); d.updateMatrix();
-        this.legs.setMatrixAt(i * 2 + (s < 0 ? 0 : 1), d.matrix);
-        this.legs.setColorAt(i * 2 + (s < 0 ? 0 : 1), c.pants);
-      }
-
-      d.rotation.set(0, f.a, 0);
-      at3(-0.13, 0.3, 0.05); d.scale.setScalar(v.carryRes ? sc : 0.0001); d.updateMatrix(); this.loads.setMatrixAt(i, d.matrix);
+      // carga nas costas do lado oposto ao que olha
+      d.position.set(q.x - rx * 0.13 * f.s * sc, y + bob + 0.3 * sc, q.y - rz * 0.13 * f.s * sc);
+      d.scale.setScalar(v.carryRes ? sc : 0.0001); d.updateMatrix(); this.loads.setMatrixAt(i, d.matrix);
       this.loads.setColorAt(i, this.tmp.set(v.carryRes ? LOAD_COLOR[v.carryRes] : '#ffffff'));
-      d.scale.setScalar(sc);
-
-      const ji = JOBS.indexOf(v.job);
-      const tm = this.tools[ji];
-      const k = toolCount[ji]++;
-      d.rotation.set(working ? -0.9 + Math.sin(time * 9 + v.id) * 0.8 : -0.2, f.a, working ? 0 : -0.25);
-      at3(0.14, 0.27, 0.05); d.updateMatrix(); tm.setMatrixAt(k, d.matrix);
     });
     const n = list.length;
-    for (const m of [this.torso, this.heads, this.hair, this.crowns, this.loads]) m.count = n;
-    this.legs.count = n * 2;
-    this.tools.forEach((m, j) => { m.count = toolCount[j]; m.instanceMatrix.needsUpdate = true; });
+    (this.sprites.geometry as InstancedBufferGeometry).instanceCount = n;
+    for (const a of Object.values(A)) a.needsUpdate = true;
+    for (const m of [this.shadows, this.crowns, this.loads]) { m.count = n; m.instanceMatrix.needsUpdate = true; }
+    if (this.loads.instanceColor) this.loads.instanceColor.needsUpdate = true;
     this.hats.forEach((m, j) => { m.count = hatCount[j]; m.instanceMatrix.needsUpdate = true; });
-    for (const m of [this.torso, this.legs, this.heads, this.hair, this.crowns, this.loads]) {
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
-    }
     if (this.face.size > 3000) this.face.clear();
     if (this.spread.size > 3000) this.spread.clear();
   }
