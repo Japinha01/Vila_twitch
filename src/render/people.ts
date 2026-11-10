@@ -6,11 +6,12 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Job, Resource, Villager } from '../sim/types';
 import { JOBS } from '../sim/types';
 import type { World } from '../sim/world';
+import { HAIRS, HATS, SHIRTS, SKINS, type HatId } from '../sim/looks';
 import { HS } from './terrain';
 
 const MAX = 600;
-const SKIN = ['#ffe0bd', '#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#6f4222'];
-const HAIR = ['#2b1d12', '#4a3020', '#7a4a21', '#c9a14a', '#d8d8d8', '#a33a1f', '#16161a'];
+const SKIN = SKINS.slice(0, 6).map((s) => s.color);
+const HAIR = HAIRS.slice(0, 7).map((h) => h.color); // o padrão do ID só usa as cores naturais; azul e rosa são escolha do viewer
 const LOAD_COLOR: Record<Resource, string> = { wood: '#a9743d', stone: '#868e96', food: '#e03131', water: '#339af0' };
 
 const hashStr = (s: string): number => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
@@ -21,6 +22,34 @@ function paint(g: BufferGeometry, hex: string): BufferGeometry {
   const n = g.getAttribute('position').count;
   g.setAttribute('color', new Float32BufferAttribute(Array.from({ length: n }, () => [c.r, c.g, c.b]).flat(), 3));
   return g.index ? g.toNonIndexed() : g;
+}
+
+/** Chapéu: peças pintadas e juntas, com a base em y = 0 (assenta no topo da cabeça). */
+function hatGeometry(id: HatId): BufferGeometry {
+  const color = HATS.find((h) => h.id === id)!.color;
+  const parts: BufferGeometry[] = [];
+  switch (id) {
+    case 'bone':
+      parts.push(paint(new CylinderGeometry(0.085, 0.092, 0.05, 8).translate(0, 0.025, 0), color));
+      parts.push(paint(new BoxGeometry(0.1, 0.012, 0.07).translate(0, 0.008, 0.095), color)); // aba da frente
+      break;
+    case 'palha':
+      parts.push(paint(new CylinderGeometry(0.17, 0.17, 0.012, 10).translate(0, 0.006, 0), color));
+      parts.push(paint(new CylinderGeometry(0.075, 0.085, 0.07, 8).translate(0, 0.045, 0), color));
+      parts.push(paint(new CylinderGeometry(0.0765, 0.0865, 0.018, 8).translate(0, 0.03, 0), '#b4452c')); // fita
+      break;
+    case 'cartola':
+      parts.push(paint(new CylinderGeometry(0.13, 0.13, 0.012, 10).translate(0, 0.006, 0), color));
+      parts.push(paint(new CylinderGeometry(0.075, 0.08, 0.14, 8).translate(0, 0.082, 0), color));
+      parts.push(paint(new CylinderGeometry(0.0805, 0.0855, 0.025, 8).translate(0, 0.03, 0), '#c92a2a'));
+      break;
+    case 'mago':
+      parts.push(paint(new CylinderGeometry(0.14, 0.14, 0.012, 10).translate(0, 0.006, 0), color));
+      parts.push(paint(new CylinderGeometry(0.01, 0.09, 0.2, 8).translate(0, 0.112, 0), color));
+      parts.push(paint(new CylinderGeometry(0.092, 0.095, 0.02, 8).translate(0, 0.022, 0), '#ffd43b'));
+      break;
+  }
+  return mergeGeometries(parts)!;
 }
 
 /** Ferramenta de cada função, com a ponta de pé em y = 0 (a mão segura o meio do cabo). */
@@ -49,9 +78,10 @@ export class People {
   private crowns: InstancedMesh;
   private loads: InstancedMesh;
   private tools: InstancedMesh[];
+  private hats: InstancedMesh[];
   private d = new Object3D();
   private tmp = new Color();
-  private cols = new Map<string, { shirt: Color; pants: Color; skin: Color; hair: Color }>();
+  private cols = new Map<string, { sig: string; shirt: Color; pants: Color; skin: Color; hair: Color }>();
   private face = new Map<number, { x: number; y: number; a: number }>();
   private spread = new Map<number, { x: number; y: number }>(); // afastamento suave entre aldeões que dividem o tile
   private lastTime = 0;
@@ -66,7 +96,8 @@ export class People {
     this.loads = new InstancedMesh(new BoxGeometry(0.11, 0.11, 0.11), lambert(), MAX);
     const toolMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
     this.tools = JOBS.map((j) => new InstancedMesh(toolGeometry(j), toolMat, MAX));
-    for (const m of [this.torso, this.legs, this.heads, this.hair, this.crowns, this.loads, ...this.tools]) {
+    this.hats = HATS.map((h) => new InstancedMesh(hatGeometry(h.id), toolMat, MAX));
+    for (const m of [this.torso, this.legs, this.heads, this.hair, this.crowns, this.loads, ...this.tools, ...this.hats]) {
       m.count = 0;
       m.frustumCulled = false;
       m.castShadow = true;
@@ -77,15 +108,18 @@ export class People {
   }
 
   private colorsFor(v: Villager): { shirt: Color; pants: Color; skin: Color; hair: Color } {
+    const l = v.look;
+    const sig = l ? `${l.skin}|${l.hair}|${l.shirt}` : '';
     let c = this.cols.get(v.userId);
-    if (!c) {
+    if (!c || c.sig !== sig) {
       const h = hashStr(v.userId);
-      const shirt = new Color(v.color);
+      const shirt = new Color(l?.shirt !== undefined ? SHIRTS[l.shirt].color : v.color);
       c = {
+        sig,
         shirt,
         pants: shirt.clone().multiplyScalar(0.45),
-        skin: new Color(SKIN[h % SKIN.length]),
-        hair: new Color(v.npc ? '#8a8f94' : HAIR[(h >>> 5) % HAIR.length]),
+        skin: new Color(l?.skin !== undefined ? SKINS[l.skin].color : SKIN[h % SKIN.length]),
+        hair: new Color(l?.hair !== undefined ? HAIRS[l.hair].color : v.npc ? '#8a8f94' : HAIR[(h >>> 5) % HAIR.length]),
       };
       this.cols.set(v.userId, c);
       if (this.cols.size > 2500) this.cols.clear();
@@ -97,6 +131,7 @@ export class People {
     const list = world.villagers.slice(0, MAX);
     const d = this.d;
     const toolCount = JOBS.map(() => 0);
+    const hatCount = HATS.map(() => 0);
     // quem divide o tile se espalha em espiral (só visual); o afastamento anda suave para ninguém "pular"
     const dt = Math.min(0.1, Math.max(0, time - this.lastTime));
     this.lastTime = time;
@@ -142,9 +177,16 @@ export class People {
       at3(0, 0.46, 0); d.updateMatrix(); this.heads.setMatrixAt(i, d.matrix); this.heads.setColorAt(i, c.skin);
       at3(0, 0.465, -0.012); d.updateMatrix(); this.hair.setMatrixAt(i, d.matrix); this.hair.setColorAt(i, c.hair);
       const crown = !v.npc && world.isLeader(v);
-      at3(0, 0.575, 0); d.scale.setScalar(crown ? sc : 0.0001); d.updateMatrix(); this.crowns.setMatrixAt(i, d.matrix);
+      at3(0, 0.575, 0); d.scale.setScalar(crown && !v.look?.hat ? sc : 0.0001); d.updateMatrix(); this.crowns.setMatrixAt(i, d.matrix);
       d.scale.setScalar(sc);
 
+      const hi = v.look?.hat ? HATS.findIndex((h) => h.id === v.look!.hat) : -1;
+      if (hi >= 0) {
+        const hm = this.hats[hi];
+        d.rotation.set(0, f.a, 0);
+        at3(0, 0.535, -0.008); d.updateMatrix(); hm.setMatrixAt(hatCount[hi]++, d.matrix);
+        d.rotation.set(0, f.a, 0);
+      }
       const swing = moving ? Math.sin(phase) * 0.7 : 0;
       for (let s = -1; s <= 1; s += 2) {
         d.rotation.set(swing * s, f.a, 0);
@@ -168,6 +210,7 @@ export class People {
     for (const m of [this.torso, this.heads, this.hair, this.crowns, this.loads]) m.count = n;
     this.legs.count = n * 2;
     this.tools.forEach((m, j) => { m.count = toolCount[j]; m.instanceMatrix.needsUpdate = true; });
+    this.hats.forEach((m, j) => { m.count = hatCount[j]; m.instanceMatrix.needsUpdate = true; });
     for (const m of [this.torso, this.legs, this.heads, this.hair, this.crowns, this.loads]) {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;

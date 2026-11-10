@@ -184,7 +184,7 @@ A vila contra desastres e ondas de inimigos controladas pelo jogo. É barato de 
 | M3 | ✅ Painel do streamer + overlay para OBS (Fonte de navegador, via Supabase Realtime). |
 | M4 | ✅ Modo Endless completo: eventos locais, conquistas e ranking na nuvem. |
 | M5 | Eventos resgatáveis. ✅ Moedas da vila. Faltam pontos do canal (EventSub) e doação. |
-| M6 | Conta do viewer (login Twitch) e cosméticos globais. |
+| M6 | Conta do viewer e cosméticos. ✅ Visual pelo chat (cor, cabelo, pele, chapéu, moldura). Faltam a página de conta com login e o visual global entre canais. |
 | M7 | Modo Guerra entre canais (código de sala). |
 | M8 | Guerra de Objetivos (4 canais, objetivos secretos, sala autoritativa). |
 | M9 | Cooperativo/ondas, temporadas, passaporte. |
@@ -349,3 +349,6 @@ Aldeões ganham **1 🪙 a cada 10 de XP** (`!moedas` mostra o saldo). Com `!eve
 Cada evento tem efeito na cena e no céu (só visual, em tempo real): ☔ chuva e ⛈ tempestade com gotas, céu escuro e relâmpagos; 🎉 festival com confete; 🌾 colheita com brilhos dourados; 🤒 praga com névoa verde; 🔥 incêndio com chamas e brasas perto do centro; ☄ meteoro riscando o céu, clarão e brasas na cratera; 🐪 caravana com uma carroça que chega, para perto da prefeitura e vai embora; 🧑‍🤝‍🧑 chegada com faíscas sobre a prefeitura. Um cartaz aparece por 6 s quando o evento começa (com o nome de quem resgatou a carta) e uma etiqueta fica no topo enquanto dura. Tudo funciona também no overlay do OBS.
 
 **Caravana:** a carroça agora é um modelo próprio (lona arqueada, carga, condutor, lanterna, rodas com aro e raios, junta de dois bois) e segue uma rota que evita prédios, água e (se possível) árvores, preferindo estradas: chega perto da prefeitura, espera e volta pelo mesmo caminho. Se não houver rota livre, o evento acontece sem a carroça.
+
+## Visual do viewer (M6, parte 1)
+Cada aldeão tem um visual padrão gerado pelo ID da Twitch (sempre o mesmo). O viewer personaliza pelo chat: `!cor`, `!cabelo`, `!pele`, `!chapeu`, `!moldura` (sem nome mostra as opções, `nenhum` volta ao padrão) e `!visual` resume o que o XP já liberou. Cor, cabelo e pele são livres; **chapéus** (boné 50 XP, chapéu de palha 150, cartola 400, chapéu de mago 900) e **molduras do nome** (bronze 200, prata 600, ouro 1500, neon 3000) se desbloqueiam com XP. Cosmético nunca dá poder: nada disso muda a simulação. O líder de profissão só mostra a coroa se não estiver de chapéu. O visual fica no perfil (save e nuvem; para a nuvem rode `supabase/looks.sql`) e aparece também no overlay. Falta para fechar o M6: página de conta com login do viewer e o visual global entre canais (hoje o perfil é por streamer).

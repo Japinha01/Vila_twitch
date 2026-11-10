@@ -65,8 +65,8 @@ export class Cloud {
     const rows = toProfileRows(owner, profiles).map((r) => ({ ...r, updated_at: new Date().toISOString() }));
     if (!rows.length) return;
     let { error } = await this.db.from('profiles').upsert(rows, { onConflict: 'owner,twitch_id' });
-    if (error && /coins/i.test(error.message)) { // coluna nova ainda não criada (supabase/coins.sql): salva sem as moedas
-      ({ error } = await this.db.from('profiles').upsert(rows.map(({ coins: _c, ...r }) => r), { onConflict: 'owner,twitch_id' }));
+    if (error && /coins|look/i.test(error.message)) { // colunas novas ainda não criadas (supabase/coins.sql e looks.sql): salva sem elas
+      ({ error } = await this.db.from('profiles').upsert(rows.map(({ coins: _c, look: _l, ...r }) => r), { onConflict: 'owner,twitch_id' }));
     }
     if (error) throw error;
   }

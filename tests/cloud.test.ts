@@ -10,8 +10,8 @@ describe('perfis na nuvem', () => {
       ['9', { name: 'Neg', xp: -4, job: 'food' as const }],
     ]);
     expect(toProfileRows('dono', m)).toEqual([
-      { owner: 'dono', twitch_id: '123', name: 'Ana', xp: 12, job: 'wood', coins: 0 },
-      { owner: 'dono', twitch_id: '9', name: 'Neg', xp: 0, job: 'food', coins: 0 },
+      { owner: 'dono', twitch_id: '123', name: 'Ana', xp: 12, job: 'wood', coins: 0, look: null },
+      { owner: 'dono', twitch_id: '9', name: 'Neg', xp: 0, job: 'food', coins: 0, look: null },
     ]);
   });
 

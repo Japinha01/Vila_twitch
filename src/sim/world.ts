@@ -8,6 +8,7 @@ import {
 } from './config';
 import { ERAS, eraGather, eraHousePop, eraStorage, goalsMet, type EraSnapshot } from './eras';
 import { findPath } from './path';
+import { applyLook, type Look, type LookPart, type LookResult } from './looks';
 import { ACHIEVEMENTS, type AchStats } from './achievements';
 import { ARRIVAL_COUNT, CARDS, CARD_HOUR_MAX, CARD_HOUR_TICKS, CARD_QUEUE_MAX, COIN_XP, EVENTS, EVENT_CHANCE, EVENT_FIRST_DAY, eventStockDelta, pickEvent, type EventKind } from './events';
 import { hashString, mulberry32, type Rng } from './rng';
@@ -24,7 +25,7 @@ export type PlaceableKind = Exclude<BuildingKind, 'townhall'>;
 export interface Season { drought: boolean; daysLeft: number }
 
 export const SAVE_VERSION = 1;
-export interface Profile { name: string; xp: number; job: Job; coins?: number }
+export interface Profile { name: string; xp: number; job: Job; coins?: number; look?: Look }
 
 /** Estado completo da vila em JSON simples. O terreno base (rio, nascentes) volta da seed. */
 /** Pedido de carta de evento esperando o streamer. */
@@ -709,7 +710,7 @@ export class World {
     const out = new Map(this.profiles);
     for (const v of this.villagers) {
       const old = out.get(v.userId);
-      out.set(v.userId, { name: v.name, xp: Math.max(v.xp, old?.xp ?? 0), job: v.job, coins: v.coins ?? old?.coins ?? 0 });
+      out.set(v.userId, { name: v.name, xp: Math.max(v.xp, old?.xp ?? 0), job: v.job, coins: v.coins ?? old?.coins ?? 0, look: v.look ?? old?.look });
     }
     return out;
   }
@@ -734,7 +735,7 @@ export class World {
       x: sx,
       y: sy,
       job: prof?.job ?? this.neediestResource(), state: 'idle', targetId: null,
-      carry: 0, carryRes: null, workLeft: 0, xp: prof?.xp ?? 0, coins: prof?.coins ?? 0, path: null, pi: 0, wait: 0,
+      carry: 0, carryRes: null, workLeft: 0, xp: prof?.xp ?? 0, coins: prof?.coins ?? 0, look: prof?.look, path: null, pi: 0, wait: 0,
     };
     this.villagers.push(v);
     return { ok: true, villager: v };
@@ -825,6 +826,15 @@ export class World {
     if (!v) return false;
     v.ordered = false;
     return true;
+  }
+
+  /** Troca uma parte do visual do viewer (!chapeu, !cor...). Chapéus e molduras exigem XP; o resto é livre. */
+  setLook(userId: string, part: LookPart, value: string): LookResult | { ok: false; reason: 'villager' } {
+    const v = this.findVillager(userId);
+    if (!v || v.npc) return { ok: false, reason: 'villager' };
+    const r = applyLook(v.look ?? {}, part, value, Math.max(v.xp, this.profiles.get(userId)?.xp ?? 0));
+    if (r.ok) v.look = Object.keys(r.look).length ? r.look : undefined;
+    return r;
   }
 
   support(): void {

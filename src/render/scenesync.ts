@@ -1,3 +1,4 @@
+import { FRAMES } from '../sim/looks';
 import {
   BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh,
   MeshBasicMaterial, PlaneGeometry, RingGeometry, Sprite, SpriteMaterial,
@@ -109,8 +110,9 @@ export class SceneSync {
   }
 
   /** Textura do nome (uma por nome, reaproveitada). */
-  private nameTexture(name: string): CanvasTexture {
-    let t = this.nameTex.get(name);
+  private nameTexture(name: string, frame?: string): CanvasTexture {
+    const key = frame ? `${name}|${frame}` : name;
+    let t = this.nameTex.get(key);
     if (!t) {
       const c = document.createElement('canvas');
       c.width = 256; c.height = 56;
@@ -118,11 +120,18 @@ export class SceneSync {
       g.font = 'bold 30px sans-serif';
       g.textAlign = 'center'; g.textBaseline = 'middle';
       g.lineWidth = 6; g.strokeStyle = 'rgba(10,14,18,0.9)'; g.lineJoin = 'round';
+      const fc = frame ? FRAMES.find((f) => f.id === frame)?.color : undefined;
+      if (fc) {
+        g.fillStyle = 'rgba(14,18,24,0.7)';
+        g.beginPath(); g.roundRect(6, 4, 244, 48, 14); g.fill();
+        g.strokeStyle = fc; g.lineWidth = 4; g.stroke();
+        g.strokeStyle = 'rgba(10,14,18,0.9)'; g.lineWidth = 6;
+      }
       g.strokeText(name.slice(0, 18), 128, 30);
       g.fillStyle = '#fff';
       g.fillText(name.slice(0, 18), 128, 30);
       t = new CanvasTexture(c);
-      this.nameTex.set(name, t);
+      this.nameTex.set(key, t);
       if (this.nameTex.size > 400) { for (const [k, v] of this.nameTex) { v.dispose(); this.nameTex.delete(k); if (this.nameTex.size <= 300) break; } }
     }
     return t;
@@ -184,7 +193,7 @@ export class SceneSync {
     for (const v of list) {
       seen.add(v.id);
       let sp = this.nameSprites.get(v.id);
-      const tex = this.nameTexture(v.name);
+      const tex = this.nameTexture(v.name, v.look?.frame);
       if (!sp) {
         sp = new Sprite(new SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
         sp.scale.set(1.8, 0.39, 1);
