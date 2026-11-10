@@ -8,6 +8,7 @@ import type { World } from '../sim/world';
 import { makeBuilding } from './models';
 import { EventFx } from './eventfx';
 import { SceneSync } from './scenesync';
+import { PostFx } from './post';
 import { buildTerrain, fillWater, HS, paintTops, waterIndices } from './terrain';
 import type { CameraState, GameView, Ghost } from './view';
 
@@ -55,6 +56,7 @@ export class Renderer3D implements GameView {
 
   /** `transparent`: fundo sem cor (overlay do OBS, a vila aparece sobre o vídeo da live). */
   constructor(private canvas: HTMLCanvasElement, private world: World, opts: { transparent?: boolean } = {}) {
+    this.transparent = !!opts.transparent;
     this.gl = new WebGLRenderer({ canvas, antialias: true, alpha: !!opts.transparent });
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     if (opts.transparent) this.gl.setClearColor(0x000000, 0);
@@ -133,11 +135,15 @@ export class Renderer3D implements GameView {
   // ---------- câmera ----------
   /** Qualidade gráfica: 0 baixa (sem sombras, resolução 1×), 1 média (sombras leves), 2 alta. */
   quality = 2;
+  private post: PostFx | null = null;
+  private transparent = false;
   setQuality(q: number): void {
     this.quality = Math.max(0, Math.min(2, Math.round(q)));
     const dpr = window.devicePixelRatio || 1;
     this.gl.setPixelRatio(Math.min(dpr, this.quality === 2 ? 2 : this.quality === 1 ? 1.25 : 1));
     this.sun.castShadow = this.quality > 0;
+    if (this.quality === 2 && !this.transparent) { try { this.post ??= new PostFx(this.gl, this.scene, this.camera); } catch { this.post = null; } }
+    else this.post = null;
     const size = this.quality === 2 ? 2048 : 1024;
     if (this.sun.shadow.mapSize.x !== size) { this.sun.shadow.mapSize.set(size, size); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null; }
     this.resize();
@@ -164,6 +170,7 @@ export class Renderer3D implements GameView {
     this.canvas.style.height = `${this.cssH}px`;
     this.camera.aspect = this.cssW / this.cssH;
     this.camera.updateProjectionMatrix();
+    this.post?.setSize(this.cssW, this.cssH, this.gl.getPixelRatio());
   }
 
   private placeCamera(): void {
@@ -273,7 +280,7 @@ export class Renderer3D implements GameView {
     this.fx.applyLight(this.sun, this.hemi, this.scene.background as Color | null);
     this.updateSpriteTint();
     this.updateOverlays();
-    this.gl.render(this.scene, this.camera);
+    if (this.post) this.post.render(); else this.gl.render(this.scene, this.camera);
   }
 
   /** Céu e luz mudam com a estação: azulado e fresco na temperada, quente e pálido na seca. */
