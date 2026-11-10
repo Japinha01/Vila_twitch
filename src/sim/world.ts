@@ -8,6 +8,8 @@ import {
 } from './config';
 import { ERAS, eraGather, eraHousePop, eraStorage, goalsMet, type EraSnapshot } from './eras';
 import { findPath } from './path';
+import { ACHIEVEMENTS, type AchStats } from './achievements';
+import { EVENTS, EVENT_CHANCE, EVENT_FIRST_DAY, eventStockDelta, pickEvent, type EventKind } from './events';
 import { hashString, mulberry32, type Rng } from './rng';
 import {
   JOBS, RESOURCES, type Building, type BuildingKind, type Job, type NodeKind, type Resource,
@@ -49,6 +51,9 @@ export interface SaveData {
   waitlist?: { userId: string; name: string; color: string }[];
   picks?: number;
   leaders?: Partial<Record<Job, string>>;
+  event?: { kind: EventKind; until: number } | null;
+  eventsSeen?: number;
+  achievements?: string[];
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
   buildings: Building[];
   nodes: ResourceNode[];
@@ -141,6 +146,10 @@ export class World {
   picks = 0; // picaretas fabricadas (aceleram a pedra)
   /** pioneiro de cada profissão: o primeiro viewer a exercê-la lidera até sair ou mudar de profissão */
   leaders: Partial<Record<Job, string>> = {};
+  /** evento local ativo (colheita, tempestade...) */
+  event: { kind: EventKind; until: number } | null = null;
+  private eventsSeen = 0;
+  achievements: string[] = [];
   private canals = 0; // canais cavados pelos aldeões
   private autoDemolished = 0; // demolições feitas pelos aldeões
   private drains = 0; // canais de drenagem cavados contra alagamentos
@@ -161,7 +170,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
-      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, drains: this.drains, autoDemolished: this.autoDemolished, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, leaders: { ...this.leaders }, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
+      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, drains: this.drains, autoDemolished: this.autoDemolished, mine: Array.from(this.mine), axes: this.axes, picks: this.picks, leaders: { ...this.leaders }, event: this.event ? { ...this.event } : null, eventsSeen: this.eventsSeen, achievements: [...this.achievements], waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -195,6 +204,9 @@ export class World {
     this.tick = data.tick;
     this.era = Math.min(Math.max(0, data.era ?? 0), ERAS.length - 1);
     this.leaders = { ...(data.leaders ?? {}) };
+    this.event = data.event ? { ...data.event } : null;
+    this.eventsSeen = data.eventsSeen ?? 0;
+    this.achievements = [...(data.achievements ?? [])];
     this.stock = { ...data.stock };
     this.supportUntil = data.supportUntil;
     this.nextId = data.nextId;
@@ -912,9 +924,57 @@ export class World {
     }
   }
 
+  /** Uma vez por dia: encerra o evento vencido e, às vezes, sorteia outro (determinístico por seed + dia, sem mexer no rng principal). */
+  private dailyEvent(): void {
+    if (this.event && this.tick >= this.event.until) {
+      this.events.push(`${EVENTS[this.event.kind].icon} ${EVENTS[this.event.kind].label} terminou.`);
+      this.event = null;
+    }
+    if (this.event || this.day < EVENT_FIRST_DAY) return;
+    const r = mulberry32((this.seed ^ Math.imul(this.day, 0x9e3779b1)) >>> 0);
+    if (r() >= EVENT_CHANCE) return;
+    const kind = pickEvent(r(), this.villagers.length);
+    if (!kind) return;
+    const def = EVENTS[kind];
+    this.event = { kind, until: this.tick + def.days * TICKS_PER_DAY };
+    this.eventsSeen++;
+    const delta = eventStockDelta(kind, this.stock, r);
+    const gains: string[] = [];
+    for (const res of RESOURCES) {
+      const d = delta[res] ?? 0;
+      if (!d) continue;
+      this.stock[res] = Math.min(this.storageCap, Math.max(0, this.stock[res] + d));
+      gains.push(`${d > 0 ? '+' : ''}${d} ${res}`);
+    }
+    this.events.push(`${def.icon} ${def.text}${gains.length ? ` (${gains.join(', ')})` : ''}`);
+  }
+
+  achievementStats(): AchStats {
+    const done = this.buildings.filter((b) => b.done);
+    return {
+      pop: this.villagers.length, era: this.era, day: this.day, built: done.length - 1,
+      kinds: new Set(done.map((b) => b.kind)).size,
+      couples: this.villagers.filter((v) => v.partner).length / 2,
+      kids: this.villagers.filter((v) => v.kid).length,
+      drains: this.drains, demolished: this.autoDemolished,
+      maxXp: this.villagers.reduce((m, v) => Math.max(m, v.xp), 0),
+      events: this.eventsSeen, professions: Object.keys(this.leaders).length,
+    };
+  }
+
+  private checkAchievements(): void {
+    const s = this.achievementStats();
+    for (const a of ACHIEVEMENTS) {
+      if (this.achievements.includes(a.id) || !a.test(s)) continue;
+      this.achievements.push(a.id);
+      this.events.push(`🏆 Conquista: ${a.icon} ${a.label}! (${a.desc})`);
+    }
+  }
+
   step(): void {
     this.tick++;
-    if (this.tick % 50 === 0) this.checkEra();
+    if (this.tick % 50 === 0) { this.checkEra(); this.checkAchievements(); }
+    if (this.tick % TICKS_PER_DAY === 0) this.dailyEvent();
     if (this.tick % 5 === 0) {
       this.crowd.fill(0);
       for (const v of this.villagers) { const t = this.tileOf(v.x, v.y); if (this.crowd[t] < 255) this.crowd[t]++; }
@@ -1070,6 +1130,7 @@ export class World {
     let f = 1;
     if (this.starving) f *= STARVING_SLOWDOWN;
     if (this.supportActive) f *= SUPPORT_BONUS;
+    if (this.event) f *= EVENTS[this.event.kind].speed;
     return f;
   }
 
@@ -1251,6 +1312,7 @@ export class World {
     const boost = 1 + POWER_BONUS * this.power.ratio; // energia das rodas d'água
     if (res === 'wood' && this.working('sawmill') > 0) amt *= SAWMILL_BONUS * boost;
     if (res === 'stone' && this.working('quarry') > 0) amt *= QUARRY_BONUS * boost;
+    if (this.event) amt *= EVENTS[this.event.kind].gather;
     amt = Math.round(amt);
     const node = this.nodes.find((n) => n.id === v.targetId);
     if (node) {

@@ -30,6 +30,32 @@ export async function initCloudPanel({ world, log, loadCloudSave }: Hooks): Prom
     login.textContent = on ? 'Sair' : 'Entrar com a Twitch';
     saveBtn.hidden = !on;
   };
+  const rankStatus = $('rankstatus'), rankBody = $('rankbody');
+  $('ranking').hidden = false;
+  let rankWarned = false;
+  const esc = (t: string): string => t.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+  const loadRank = async (): Promise<void> => {
+    try {
+      const { villages, viewers } = await c.loadRanking();
+      const medal = (i: number): string => ['🥇', '🥈', '🥉'][i] ?? `${i + 1}.`;
+      rankBody.innerHTML = `<h3>Maiores vilas</h3>${villages.map((v, i) => `<div class="rk">${medal(i)} <b>${esc(v.streamer)}</b> · ${v.pop} aldeões · era ${v.era + 1} · dia ${v.day} <i>${v.score} pts</i></div>`).join('') || '<div class="rk">ninguém ainda</div>'}`
+        + `<h3>Aldeões com mais XP</h3>${viewers.map((v, i) => `<div class="rk">${medal(i)} <b>${esc(v.name)}</b> <small>vila de ${esc(v.streamer)}</small> <i>${v.xp} XP</i></div>`).join('') || '<div class="rk">ninguém ainda</div>'}`;
+      rankStatus.textContent = '';
+    } catch {
+      rankStatus.textContent = 'indisponível';
+      rankBody.textContent = 'O ranking ainda não foi criado no Supabase: rode o arquivo supabase/ranking.sql no SQL Editor.';
+    }
+  };
+  const sendRank = async (): Promise<void> => {
+    if (!c.session) return;
+    try { await c.uploadRanking(world.achievementStats(), world.achievements.length, world.collectProfiles()); }
+    catch (err) {
+      if (!rankWarned) log(`⚠ Ranking: ${err instanceof Error ? err.message : 'erro desconhecido'} (rodou o supabase/ranking.sql?)`, 'ev');
+      rankWarned = true;
+    }
+  };
+  $('rankrefresh').addEventListener('click', () => { void sendRank().then(loadRank); });
+  void loadRank();
   const save = async (manual: boolean): Promise<void> => {
     if (!c.session || (!auto && !manual)) return;
     try {
@@ -37,6 +63,7 @@ export async function initCloudPanel({ world, log, loadCloudSave }: Hooks): Prom
       failed = false;
       auto = true;
       if (manual) log('☁ Vila salva na nuvem.', 'ev');
+      void sendRank();
     } catch (err) {
       if (manual || !failed) log(`⚠ Não foi possível salvar na nuvem: ${err instanceof Error ? err.message : 'erro desconhecido'}`, 'ev');
       failed = true; // avisa uma vez só até voltar a funcionar
