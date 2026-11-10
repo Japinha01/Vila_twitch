@@ -37,8 +37,8 @@ export class Renderer3D implements GameView {
   private waterCol!: Float32Array;
   private paintFrame = 0;
 
-  private sun = new DirectionalLight('#fff0d0', 1.25);
-  private hemi = new HemisphereLight('#d6ecff', '#6b5a43', 0.75);
+  private sun = new DirectionalLight('#ffe6b8', 1.45);
+  private hemi = new HemisphereLight('#cfe0ff', '#5e4e3b', 0.55);
   private mood = 0; // 0 = temperada, 1 = seca (suavizado)
   private overlays: Mesh[] = []; // quadras de destaque (prévia de obra e mouse)
   private sync: SceneSync;
@@ -66,7 +66,7 @@ export class Renderer3D implements GameView {
     this.scene.add(this.hemi);
     this.scene.add(new AmbientLight('#ffffff', 0.15));
     const sun = this.sun;
-    sun.position.set(-18, 30, 12);
+    sun.position.set(-24, 26, 12);
     sun.target.position.set(GRID_W / 2, 0, GRID_H / 2);
     sun.position.add(sun.target.position);
     sun.castShadow = true;
@@ -319,10 +319,10 @@ export class Renderer3D implements GameView {
       (this.scene.background as Color).set('#26323a').lerp(this.tmpDry.set('#4a3a2c'), m);
       this.scene.fog?.color.copy(this.scene.background as Color);
     }
-    this.sun.color.set('#fff0d0').lerp(this.tmpDry.set('#ffc880'), m);
-    this.sun.intensity = 1.25 - 0.1 * m;
-    this.hemi.color.set('#d6ecff').lerp(this.tmpDry.set('#ffe9c4'), m);
-    this.hemi.intensity = 0.75 - 0.1 * m;
+    this.sun.color.set('#ffe6b8').lerp(this.tmpDry.set('#ffc880'), m);
+    this.sun.intensity = 1.45 - 0.1 * m;
+    this.hemi.color.set('#cfe0ff').lerp(this.tmpDry.set('#ffe9c4'), m);
+    this.hemi.intensity = 0.55 - 0.08 * m;
   }
   private tmpDry = new Color();
 

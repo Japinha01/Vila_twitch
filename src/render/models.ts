@@ -1,16 +1,39 @@
 import {
   BoxGeometry, BufferAttribute, ConeGeometry, CylinderGeometry, Group, IcosahedronGeometry, Mesh, MeshLambertMaterial,
-  BufferGeometry, type Material, type Object3D,
+  BufferGeometry, CanvasTexture, NearestFilter, NoColorSpace, RepeatWrapping, type Material, type Object3D,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BuildingKind } from '../sim/types';
 
 /** Modelos low poly gerados por código. Origem no chão, centro da base em (0, 0, 0). Unidade = 1 tile. */
 
+/** Textura de "pixels" em tons de cinza (8×8, sem filtro): multiplica a cor e dá o grão de pixel art às superfícies. */
+let pixelTex: CanvasTexture | null = null;
+function pixelGrain(): CanvasTexture | null {
+  if (pixelTex || typeof document === 'undefined') return pixelTex;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 8;
+  const g = cv.getContext('2d');
+  if (!g) return null;
+  let seed = 7;
+  const rnd = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    const v = Math.round(255 * (0.8 + 0.2 * Math.floor(rnd() * 4) / 3 + (y % 4 === 0 ? -0.05 : 0)));
+    g.fillStyle = `rgb(${v},${v},${v})`;
+    g.fillRect(x, y, 1, 1);
+  }
+  pixelTex = new CanvasTexture(cv);
+  pixelTex.magFilter = pixelTex.minFilter = NearestFilter;
+  pixelTex.generateMipmaps = false;
+  pixelTex.wrapS = pixelTex.wrapT = RepeatWrapping;
+  pixelTex.colorSpace = NoColorSpace;
+  return pixelTex;
+}
+
 const matCache = new Map<string, MeshLambertMaterial>();
 export const mat = (hex: string): MeshLambertMaterial => {
   let m = matCache.get(hex);
-  if (!m) { m = new MeshLambertMaterial({ color: hex, flatShading: true }); matCache.set(hex, m); }
+  if (!m) { m = new MeshLambertMaterial({ color: hex, flatShading: true, map: pixelGrain() }); matCache.set(hex, m); }
   return m;
 };
 
