@@ -302,3 +302,5 @@ O overlay acompanha a **câmera do jogo** (zoom, giro e deslocamento) e mostra o
 
 ## Centros urbanos densos
 Nas eras avançadas, casas e mercados cercados por muitas construções (6 ou mais vizinhas) evoluem visualmente: casas viram **condomínios** (torres com varandas e passarela) e mercados viram **galerias** (teto de vidro, arcadas) e depois **shoppings** (átrio de vidro, letreiro, estacionamento). É só visual; a simulação não muda.
+
+Os aldeões também focam em subir de era: ao chegar a 70% da meta de população da próxima era, o planejador passa a construir tudo o que falta nas metas (casas, fazendas e poços incluídos), sem pressa e só com a vila estável (comida e água acima de 25%).
