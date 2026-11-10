@@ -16,6 +16,8 @@ export type Command =
   | { name: 'status' }
   | { name: 'vila' }
   | { name: 'livre' }
+  | { name: 'profissao' }
+  | { name: 'meus' }
   | { name: 'apoiar' };
 
 type ParseResult = { ok: true; cmd: Command } | { ok: false; error?: string };
@@ -26,7 +28,7 @@ const RES_ALIAS: Record<string, Job> = {
 
 /** Cooldown por viewer e por comando, em ms de relógio real. */
 export const COOLDOWN_MS: Record<Command['name'], number> = {
-  entrar: 5000, fila: 5000, trabalhar: 5000, livre: 5000, status: 5000, vila: 10000, apoiar: 60000,
+  entrar: 5000, fila: 5000, trabalhar: 5000, livre: 5000, status: 5000, profissao: 5000, meus: 5000, vila: 10000, apoiar: 60000,
 };
 
 /** Etapa 1 do pipeline: validação (sintaxe e argumentos). */
@@ -39,6 +41,8 @@ export function parseCommand(text: string): ParseResult {
     case 'entrar': return { ok: true, cmd: { name: 'entrar' } };
     case 'fila': case 'sair': return { ok: true, cmd: { name: 'fila' } };
     case 'status': return { ok: true, cmd: { name: 'status' } };
+    case 'profissao': return { ok: true, cmd: { name: 'profissao' } };
+    case 'meus': case 'estabelecimentos': return { ok: true, cmd: { name: 'meus' } };
     case 'vila': return { ok: true, cmd: { name: 'vila' } };
     case 'apoiar': return { ok: true, cmd: { name: 'apoiar' } };
     case 'livre': case 'autonomo': return { ok: true, cmd: { name: 'livre' } };
@@ -135,6 +139,16 @@ export class CommandProcessor {
       case 'status':
         reply(`${labelJob(v.job)} · carregando ${v.carry} · XP ${v.xp}.${w.isStuck(v) ? ' Sem trabalho disponível agora (estoque cheio ou sem recurso): troque de função com !trabalhar.' : ''}`);
         break;
+      case 'profissao': {
+        const p = w.professionOf(v);
+        reply(`sua profissão é ${labelJob(p)}${w.isLeader(v) ? ' 👑 (você é o líder da profissão!)' : w.leaders[p] ? ` (líder: ${w.findVillager(w.leaders[p]!)?.name ?? '—'})` : ''}.`);
+        break;
+      }
+      case 'meus': {
+        const mine = w.establishmentsOf(msg.userId);
+        reply(mine.length ? `seus estabelecimentos: ${mine.slice(0, 6).join(', ')}${mine.length > 6 ? ` e mais ${mine.length - 6}` : ''}.` : 'você ainda não é dono de nada. Líderes de profissão ganham os estabelecimentos da área.');
+        break;
+      }
       case 'vila': {
         const s = w.stock;
         const se = w.season;
