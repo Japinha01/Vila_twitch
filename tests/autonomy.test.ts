@@ -101,6 +101,7 @@ describe('autonomia dos aldeões', () => {
   it('quem escolheu com !trabalhar não muda sozinho; !livre devolve a decisão', () => {
     const w = new World(5);
     const chat = new CommandProcessor(w, { now: () => 0 });
+    w.npcsOn = false;
     w.addVillager('1', 'Ana', '#fff');
     w.stock.stone = 0; w.stock.food = 500; w.stock.water = 500; w.stock.wood = 500;
     w.setJob('1', 'wood');
