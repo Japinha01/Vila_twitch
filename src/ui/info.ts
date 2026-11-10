@@ -14,7 +14,14 @@ export function describeTile(w: World, x: number, y: number): string[] {
   for (const v of w.villagers) {
     if (Math.floor(v.x) !== x || Math.floor(v.y) !== y) continue;
     const load = v.carryRes ? `, carregando ${v.carry} de ${RESOURCE_LABEL[v.carryRes]}` : '';
-    out.push(`👤 ${v.name}${v.npc ? ' (NPC)' : ''}: ${JOB_LABEL[v.job]}${load}${v.npc ? '' : w.isLeader(v) ? ` · 👑 líder dos ${JOB_LABEL[w.professionOf(v)]}s` : ` · profissão: ${JOB_LABEL[w.professionOf(v)]}`}`);
+    out.push(`👤 ${v.name}${v.kid ? ' (criança)' : v.npc ? ' (NPC)' : ''}: ${JOB_LABEL[v.job]}${load}${v.npc ? '' : w.isLeader(v) ? ` · 👑 líder dos ${JOB_LABEL[w.professionOf(v)]}s` : ` · profissão: ${JOB_LABEL[w.professionOf(v)]}`}`);
+  }
+
+  for (const v of w.villagers) {
+    if (Math.floor(v.x) !== x || Math.floor(v.y) !== y) continue;
+    const rel = w.relationsOf(v.userId);
+    const bits = [rel.partner ? `💞 ${rel.partner}` : '', rel.friends.length ? `🤝 ${rel.friends.join(', ')}` : '', rel.kids.length ? `👶 ${rel.kids.join(', ')}` : '', rel.parents ? `filho de ${rel.parents.join(' e ')}` : ''].filter(Boolean);
+    if (bits.length) out.push(`   ${bits.join(' · ')}`);
   }
 
   const b = w.buildingAt(x, y);

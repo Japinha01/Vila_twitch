@@ -329,3 +329,6 @@ Aldeão com carga que não acha caminho até um depósito tenta mais 4 vezes e e
 
 ## Visual novo dos aldeões
 Cada aldeão agora tem pernas que andam, torso na cor do viewer, cabeça e cabelo variados (tom de pele e cabelo vêm do ID, estáveis), a **ferramenta da função na mão** (machado, picareta, enxada, balde ou martelo, que balança ao trabalhar) e a carga nas costas. **Líderes de profissão** usam uma coroa dourada; NPCs têm cabelo grisalho. Tudo em instâncias (cerca de 10 chamadas de desenho para centenas de aldeões).
+
+## Amizades e famílias
+Aldeões que ficam perto um do outro (mesmo tile ou vizinhos) ganham afinidade a cada 2 s. Com 40 pontos viram **amigos** 🤝 (até 3 amigos cada); amigos com 140 pontos viram **casal** 💞. Casais com casa livre na vila e ninguém na fila têm, a cada minuto, 30% de chance de um **filho NPC** 👶 (até 2 por casal): menor, conta na população, vira adulto em 10 minutos (a x1) e é o último a sair quando um viewer precisa de vaga. Vínculos somem quando o outro sai da vila. Aparece ao passar o mouse (💞, 🤝, 👶) e no comando `!amigos` (também `!amigo` e `!familia`). Eventos de amizade, namoro e nascimento aparecem no log.

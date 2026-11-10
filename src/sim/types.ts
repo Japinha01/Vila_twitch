@@ -62,6 +62,14 @@ export interface Villager {
   npc?: boolean;
   /** tentativas seguidas de guardar a carga sem achar caminho: passando do limite, ele desiste e larga a carga */
   storeFails?: number;
+  /** afinidade por quem trabalhou perto (userId -> pontos); guarda só os mais fortes */
+  bond?: Record<string, number>;
+  friends?: string[];
+  partner?: string;
+  /** criança NPC: nasce de um casal, é menor e vira adulta com o tempo */
+  kid?: boolean;
+  parents?: [string, string];
+  born?: number;
 }
 
 export const JOBS: Job[] = ['wood', 'stone', 'food', 'water', 'build'];

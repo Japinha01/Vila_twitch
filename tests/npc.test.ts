@@ -10,7 +10,7 @@ describe('moradores NPC', () => {
     for (let t = 0; t < 9000; t++) w.step();
     expect(w.npcCount).toBeGreaterThan(0);
     expect(w.npcCount).toBeLessThanOrEqual(Math.max(NPC_MIN, 1));
-    expect(w.villagers.length).toBe(1 + w.npcCount);
+    expect(w.villagers.length).toBe(1 + w.villagers.filter((v) => v.npc).length); // NPCs adultos e crianças
   });
 
   it('viewer tem prioridade: com a vila cheia, um NPC sai para dar a vaga', () => {
