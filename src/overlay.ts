@@ -8,11 +8,11 @@ import { EraBanner, eraLine } from './ui/erabanner';
 const ICON = { wood: '🪵', stone: '🪨', food: '🍎', water: '💧' } as const;
 
 /**
- * Página do overlay (Fonte de navegador do OBS): só a vila, sem painel, com fundo transparente.
+ * Página do overlay (Fonte de navegador do OBS): só a vila, sem painel, com fundo escuro (ou transparente com &transparente=1).
  * Não roda simulação: mostra o que o jogo do streamer transmite pelo Supabase.
  * Reproduz a câmera do streamer (zoom, giro, deslocamento), os nomes dos aldeões e o status da vila;
  * o que aparece (nomes, status) o streamer escolhe no painel do jogo.
- * Parâmetros: ?overlay=TOKEN  &fundo=1 (fundo sólido)  &2d (visual 2D)
+ * Parâmetros: ?overlay=TOKEN  &transparente=1 (fundo transparente)  &2d (visual 2D)
  */
 export async function runOverlay(
   token: string,
@@ -20,7 +20,7 @@ export async function runOverlay(
 ): Promise<void> {
   document.body.classList.add('overlay');
   const params = new URLSearchParams(location.search);
-  const solid = params.has('fundo');
+  const solid = !params.has('transparente'); // fundo escuro por padrão; &transparente=1 deixa a vila sobre o vídeo
   if (!solid) document.documentElement.classList.add('clear');
   let canvas = document.getElementById('game') as HTMLCanvasElement;
   const msg = document.createElement('div');

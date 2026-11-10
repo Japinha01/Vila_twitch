@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, STORE_GIVE_UP, AUTO_FILL_ROUNDS, AUTO_DEMOLISH_ROUNDS, AUTO_DEMOLISH_MAX, DIG_COST, NPC_EVERY, NPC_MIN, NPC_NAMES, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, STORE_GIVE_UP, CROWD_COST, CROWD_MAX, AUTO_FILL_ROUNDS, AUTO_DEMOLISH_ROUNDS, AUTO_DEMOLISH_MAX, DIG_COST, NPC_EVERY, NPC_MIN, NPC_NAMES, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, WAITLIST_MAX, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -115,6 +115,7 @@ export class World {
   readonly deck = new Float32Array(N);
   /** passos de aldeões com água até o joelho, por tile (decai com o tempo): mostra onde falta ponte */
   private wadeTraffic = new Float32Array(N);
+  private crowd = new Uint8Array(N); // aldeões por tile (atualizado a cada 5 passos), pesa nas rotas
 
   private nextId = 1;
   private occ = new Uint8Array(N); // 1 = tile ocupado por nó/prédio
@@ -911,6 +912,10 @@ export class World {
   step(): void {
     this.tick++;
     if (this.tick % 50 === 0) this.checkEra();
+    if (this.tick % 5 === 0) {
+      this.crowd.fill(0);
+      for (const v of this.villagers) { const t = this.tileOf(v.x, v.y); if (this.crowd[t] < 255) this.crowd[t]++; }
+    }
     if (this.tick % 10 === 0) { this.updatePower(); this.updateProfessions(); }
     if (this.waitlist.length && this.tick % 20 === 0) this.admitWaiting();
     if (this.autonomy && this.tick % AUTONOMY_EVERY === 0) this.autonomyStep();
@@ -1085,8 +1090,9 @@ export class World {
     if (!this.walkable(to)) return Infinity;
     if (this.bridge[from] || this.bridge[to]) return 1; // ponte: sem degrau, sem vau
     if (Math.abs(this.height[from] - this.height[to]) > MAX_STEP) return Infinity;
-    if (this.water[to] >= WADE_SLOW_DEPTH) return 2;
-    return this.road[to] ? ROAD_STEP_COST : 1;
+    const jam = Math.min(this.crowd[to], CROWD_MAX) * CROWD_COST;
+    if (this.water[to] >= WADE_SLOW_DEPTH) return 2 + jam;
+    return (this.road[to] ? ROAD_STEP_COST : 1) + jam;
   }
 
   /** Tiles livres cujo centro está a `reach` do ponto (cx, cy). */
@@ -1182,7 +1188,10 @@ export class World {
 
   private decide(v: Villager): void {
     // sobrou carga de outra função (trocou de profissão no meio do caminho): guarda antes de procurar trabalho
-    if (v.carry > 0 && v.carryRes) { v.state = 'toStore'; v.path = null; return; }
+    if (v.carry > 0 && v.carryRes) {
+      if (this.stock[v.carryRes] >= this.storageCap) { v.carry = 0; v.carryRes = null; return; } // estoque cheio: larga a carga e procura outra coisa
+      v.state = 'toStore'; v.path = null; return;
+    }
     const cands = this.candidates(v.job);
     const id = cands.length ? this.route(v, cands) : undefined;
     if (id === undefined) { v.wait = RETRY_TICKS; return; } // sem alvo ou sem caminho: tenta de novo em instantes
@@ -1343,8 +1352,10 @@ export class World {
   /** Profissão para quem precisa de uma: o recurso com mais falta de braços. */
   private neediestResource(except?: Villager): Resource {
     const d = this.deficits(except);
-    let best: Resource = 'wood';
-    for (const r of RESOURCES) if (d[r] > d[best] + 1e-9) best = r;
+    const open = RESOURCES.filter((r) => this.stock[r] < this.storageCap); // recurso com estoque cheio não tem o que fazer
+    const pool = open.length ? open : RESOURCES;
+    let best: Resource = pool[0];
+    for (const r of pool) if (d[r] > d[best] + 1e-9) best = r;
     return best;
   }
 
@@ -1486,13 +1497,16 @@ export class World {
     // com fome ou sede só se constrói o que resolve isso; o resto espera a vila se firmar
     let wantBuilders = Math.min((critical + (stable ? open.length - critical : 0)) * 2, Math.ceil(this.villagers.length / 4));
     if (critical > 0) wantBuilders = Math.max(wantBuilders, 1);
+    const helperRoom = this.villagers.some((v) => v.job !== 'build' && this.isStuck(v)) || RESOURCES.some((r) => this.stock[r] >= this.storageCap) ? open.length * 3 : 0;
     for (const v of this.villagers) {
       if (v.ordered) continue;
       if ((this.tick / AUTONOMY_EVERY + v.id) % 3 !== 0) continue; // cada aldeão reavalia a cada ~30 s, em turnos
       const stuck = this.isStuck(v);
       let best: Job = v.job;
-      if (v.job !== 'build' && builders() < wantBuilders) best = 'build';
-      else if (v.job === 'build' && (open.length === 0 || builders() > wantBuilders)) best = this.neediestResource();
+      // sem trabalho na função: ajuda nas obras abertas (até 3 ajudantes por obra além dos construtores normais)
+      if (stuck && v.job !== 'build' && open.length > 0 && builders() < wantBuilders + helperRoom) best = 'build';
+      else if (v.job !== 'build' && builders() < wantBuilders) best = 'build';
+      else if (v.job === 'build' && (open.length === 0 || builders() > wantBuilders + helperRoom)) best = this.neediestResource();
       else if (v.job !== 'build') {
         const d = this.deficits(v);
         const cand = this.neediestResource(v);

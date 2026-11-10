@@ -155,3 +155,6 @@ export const AUTO_DEMOLISH_ROUNDS = 14; // rodadas alagado antes de demolirem de
 export const AUTO_DEMOLISH_MAX = 6; // demolições autônomas por vila
 
 export const STORE_GIVE_UP = 4; // tentativas seguidas sem caminho até o depósito antes de largar a carga
+
+export const CROWD_COST = 0.5; // custo extra de rota por aldeão parado ou andando no tile (até CROWD_MAX), para os caminhos se espalharem
+export const CROWD_MAX = 4;
