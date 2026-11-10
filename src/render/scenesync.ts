@@ -226,7 +226,24 @@ export class SceneSync {
     for (const [id, g] of this.nodes) if (!seen.has(id)) { this.scene.remove(g); this.nodes.delete(id); }
   }
 
+  /** Prédios no miolo da cidade: com 6+ vizinhos de casa, mercado ou prefeitura a 5 tiles (recalculado de tempos em tempos). */
+  private dense = new Set<number>();
+  private denseFrame = 0;
+  private refreshDensity(): void {
+    if (this.denseFrame++ % 45 !== 0) return;
+    const urban = this.world.buildings.filter((b) => b.done && (b.kind === 'house' || b.kind === 'market' || b.kind === 'townhall'));
+    const next = new Set<number>();
+    for (const b of urban) {
+      if (b.kind === 'townhall') continue;
+      let n = 0;
+      for (const o of urban) if (o !== b && (o.x - b.x) ** 2 + (o.y - b.y) ** 2 <= 25) n++;
+      if (n >= 6) next.add(b.id);
+    }
+    this.dense = next;
+  }
+
   private syncBuildings(camera: Camera, time: number): void {
+    this.refreshDensity();
     const w = this.world;
     const seen = new Set<number>();
     for (const b of w.buildings) {
@@ -234,10 +251,10 @@ export class SceneSync {
       if (b.kind === 'dam' && b.done) continue;
       seen.add(b.id);
       let g = this.buildings.get(b.id);
-      const stage = buildingStage(b.kind, w.era);
+      const stage = buildingStage(b.kind, w.era, this.dense.has(b.id));
       if (g && g.userData.stage !== stage) { this.scene.remove(g); this.buildings.delete(b.id); g = undefined; } // a fogueira vira prefeitura
       if (!g) {
-        g = makeBuilding(b.kind, w.era);
+        g = makeBuilding(b.kind, w.era, this.dense.has(b.id));
         g.userData.stage = stage;
         shade(g);
         this.scene.add(g);
