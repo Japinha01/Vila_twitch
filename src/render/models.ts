@@ -326,7 +326,9 @@ function sawmill(): Group {
   saw.rotation.x = Math.PI / 2;
   saw.position.set(0.35, 0.55, 0.4);
   g.add(saw);
-  g.add(cyl(mat('#868e96'), 0.05, 0.05, 0.06, 6, 0.35, 0.53, 0.43)).rotation.x = Math.PI / 2;
+  const hub = cyl(mat('#868e96'), 0.05, 0.05, 0.06, 6, 0.35, 0.53, 0.43);
+  hub.rotation.x = Math.PI / 2;
+  g.add(hub);
   g.add(box(mat(COLORS.woodDark), 0.9, 0.35, 0.5, 0.3, 0, 0.5)); // bancada
   for (let i = 0; i < 3; i++) for (let j = 0; j <= i; j++) { const l = cyl(mat(COLORS.trunk), 0.09, 0.09, 0.75, 6, -0.7 + i * 0.2, 0.09 + j * 0.17, 0.85); l.rotation.x = Math.PI / 2; l.rotation.z = 0; g.add(l); }
   return g;
@@ -338,7 +340,10 @@ function quarry(): Group {
   g.add(box(mat('#6c757d'), 1.2, 0.08, 1.0, -0.2, 0.2, -0.2)); // cova
   g.add(rock(mat(COLORS.stone), 0.32, -0.45, 0.2, 0.4), rock(mat(COLORS.stone), 0.24, 0.5, 0.2, -0.4), rock(mat('#ced4da'), 0.2, 0.35, 0.2, 0.5), rock(mat(COLORS.stoneDark), 0.26, 0.55, 0.2, 0.1));
   // carrinho de mão e picareta
-  g.add(box(mat(COLORS.woodDark), 0.4, 0.14, 0.28, -0.55, 0.22, -0.5), cyl(mat('#495057'), 0.1, 0.1, 0.05, 8, -0.55, 0.12, -0.38)).rotation.x = Math.PI / 2;
+  g.add(box(mat(COLORS.woodDark), 0.4, 0.14, 0.28, -0.55, 0.22, -0.5)); // carrinho de mão
+  const wheel = cyl(mat('#495057'), 0.1, 0.1, 0.05, 8, -0.55, 0.12, -0.38);
+  wheel.rotation.z = Math.PI / 2;
+  g.add(wheel);
   const handle = cyl(mat(COLORS.woodDark), 0.025, 0.025, 0.6, 4, 0.1, 0.2, -0.65); handle.rotation.z = 0.7; g.add(handle);
   g.add(box(mat('#495057'), 0.3, 0.05, 0.05, 0.25, 0.7, -0.65));
   return g;
