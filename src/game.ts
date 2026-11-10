@@ -59,6 +59,20 @@ if (renderer.setQuality) {
     label();
   });
 } else qualityBtn.hidden = true;
+// Nomes sobre os aldeões (ligados por padrão, como no overlay); a escolha fica salva.
+const NAMES_KEY = 'vila-do-chat:nomes';
+const namesBtn = document.getElementById('names') as HTMLButtonElement;
+if (renderer.setNames) {
+  let on = true;
+  try { on = localStorage.getItem(NAMES_KEY) !== '0'; } catch { /* sem armazenamento */ }
+  const apply = (): void => { renderer.setNames!(on); namesBtn.classList.toggle('on', on); };
+  apply();
+  namesBtn.addEventListener('click', () => {
+    on = !on;
+    try { localStorage.setItem(NAMES_KEY, on ? '1' : '0'); } catch { /* ok */ }
+    apply();
+  });
+} else namesBtn.hidden = true;
 const panel = new Panel(world, chat, renderer);
 const eraBanner = new EraBanner(world, document.getElementById('stage')!);
 const eventBanner = new EventBanner(world, document.getElementById('stage')!);
