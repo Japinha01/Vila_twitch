@@ -307,3 +307,6 @@ Os aldeões também focam em subir de era: ao chegar a 70% da meta de populaçã
 
 ## Profissões, líderes e donos
 Cada viewer tem uma **profissão**: a função em que mais trabalhou (lenhador, pedreiro, fazendeiro, aguadeiro ou construtor). O **pioneiro** de cada profissão vira o **líder** (👑) até sair ou mudar de profissão. Estabelecimentos prontos ganham dono: fazendas e poços vão para os líderes da área, serrarias e pedreiras também, e mercados, armazéns e rodas d'água para o líder dos construtores. Cada viewer sem casa ganha uma. O nome fica "tipo de viewer" (ex.: "Fazenda de Ana"; o mercado vira "Galeria Ana" na era 4 e "Shopping Ana" na era 6). Aparece ao passar o mouse e nos comandos `!profissao` e `!meus`. Nomes já passam pelo filtro de blocklist; nada novo vai para o overlay além do que a vila salva.
+
+## Drenagem de alagamentos
+Se algum prédio fica alagado por duas rodadas de autonomia seguidas, os aldeões cavam um canal da água ao lado dele até terra mais baixa ou o ralo da borda sul, longe de outras construções (o fundo desce 1 nível a cada 6 tiles). Gasta madeira (1 por nível), no máximo 8 canais por vila.
