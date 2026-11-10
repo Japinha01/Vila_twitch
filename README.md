@@ -332,3 +332,5 @@ Cada aldeão agora tem pernas que andam, torso na cor do viewer, cabeça e cabel
 
 ## Amizades e famílias
 Aldeões que ficam perto um do outro (mesmo tile ou vizinhos) ganham afinidade a cada 2 s. Com 40 pontos viram **amigos** 🤝 (até 3 amigos cada); amigos com 140 pontos viram **casal** 💞. Casais com casa livre na vila e ninguém na fila têm, a cada minuto, 30% de chance de um **filho NPC** 👶 (até 2 por casal): menor, conta na população, vira adulto em 10 minutos (a x1) e é o último a sair quando um viewer precisa de vaga. Vínculos somem quando o outro sai da vila. Aparece ao passar o mouse (💞, 🤝, 👶) e no comando `!amigos` (também `!amigo` e `!familia`). Eventos de amizade, namoro e nascimento aparecem no log.
+
+Aldeões que dividem o mesmo tile se espalham em espiral (só visual, a simulação não muda), com movimento suave, para ninguém ficar dentro do outro.
