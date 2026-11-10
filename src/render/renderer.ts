@@ -152,6 +152,7 @@ export class Renderer implements GameView {
     const base = lo.map((c, k) => c + (hi[k] - c) * t0) as RGB; // cor do solo
     let top = isDam ? '#adb5bd' : mix(base, base, 0);
     if (w.road[i]) top = '#6b6f76';
+    else if (w.mine[i]) top = '#8f9296';
     else if (w.zone[i]) top = mix(base, rgb(['#ffffff', '#40c057', '#339af0', '#f59f00'][w.zone[i]]), 0.35);
     const zr = x + 1 < GRID_W ? w.height[w.idx(x + 1, y)] : 0;
     const zl = y + 1 < GRID_H ? w.height[w.idx(x, y + 1)] : 0;

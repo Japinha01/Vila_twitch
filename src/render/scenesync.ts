@@ -7,6 +7,7 @@ import { MIN_HARVEST, NODE_MAX } from '../sim/config';
 import type { Building, Resource, Villager } from '../sim/types';
 import type { World } from '../sim/world';
 import { COLORS, buildingStage, makeBuilding, makeBush, makeRock, mat } from './models';
+import { MineProps } from './mines';
 import { TreeBatch } from './trees';
 import { HS } from './terrain';
 
@@ -24,6 +25,7 @@ const hash01 = (id: number): number => ((Math.imul(id, 2654435761) >>> 0) % 1000
 export class SceneSync {
   private nodes = new Map<number, Group>();
   private trees: TreeBatch;
+  private mines: MineProps;
   private buildings = new Map<number, Group>();
   private bodies: InstancedMesh;
   private heads: InstancedMesh;
@@ -52,6 +54,7 @@ export class SceneSync {
 
   constructor(private scene: Scene, private world: World) {
     this.trees = new TreeBatch(scene);
+    this.mines = new MineProps(scene);
     this.bodies = new InstancedMesh(new CylinderGeometry(0.11, 0.14, 0.34, 6), new MeshLambertMaterial({ flatShading: true }), MAX_VILLAGERS);
     this.heads = new InstancedMesh(new IcosahedronGeometry(0.1, 0), mat('#ffe0bd'), MAX_VILLAGERS);
     this.loads = new InstancedMesh(new BoxGeometry(0.11, 0.11, 0.11), new MeshLambertMaterial({ flatShading: true }), MAX_VILLAGERS);
@@ -196,6 +199,7 @@ export class SceneSync {
     const w = this.world;
     const seen = new Set<number>();
     this.trees.update(w, hash01); // árvores: instâncias
+    this.mines.update(w);
     for (const n of w.nodes) {
       if (n.kind === 'tree') continue;
       seen.add(n.id);

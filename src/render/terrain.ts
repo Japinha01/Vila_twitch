@@ -82,6 +82,7 @@ export function paintTops(w: World, colors: Float32Array): void {
         (DRY[1] + (GRASS[1] - DRY[1]) * t) * lift * tint[1],
         (DRY[2] + (GRASS[2] - DRY[2]) * t) * lift * tint[2],
       ];
+      if (w.mine[i]) c = [c[0] * 0.45 + 0.52 * 0.55, c[1] * 0.45 + 0.5 * 0.55, c[2] * 0.45 + 0.48 * 0.55]; // jazida: cinza pedregoso
       const z = w.zone[i];
       if (z) c = [c[0] * 0.65 + ZONE[z][0] * 0.35, c[1] * 0.65 + ZONE[z][1] * 0.35, c[2] * 0.65 + ZONE[z][2] * 0.35];
     }
