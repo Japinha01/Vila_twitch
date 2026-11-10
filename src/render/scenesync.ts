@@ -2,7 +2,7 @@ import { FRAMES, visibleLook } from '../sim/looks';
 import {
   BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh,
   MeshBasicMaterial, PlaneGeometry, RingGeometry, Sprite, SpriteMaterial,
-  type Camera, type Scene,
+  type Camera, type Color, type Scene,
 } from 'three';
 import { MIN_HARVEST, NODE_MAX } from '../sim/config';
 import type { Building, Villager } from '../sim/types';
@@ -99,10 +99,11 @@ export class SceneSync {
     return this.pos.get(v.id) ?? v;
   }
 
-  update(time: number, camera: Camera, selectedId: number | null): void {
+  update(time: number, camera: Camera, selectedId: number | null, tint: Color): void {
     this.smoothPositions(time);
     this.syncNodes();
     this.syncBuildings(camera, time);
+    this.people.setView(camera, tint);
     this.syncVillagers(time);
     this.syncSelection(camera, selectedId);
     this.syncNames();

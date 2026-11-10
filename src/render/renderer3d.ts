@@ -261,7 +261,7 @@ export class Renderer3D implements GameView {
       col.needsUpdate = true;
     }
     const now = performance.now() / 1000;
-    this.sync.update(now, this.camera, this.selectedId);
+    this.sync.update(now, this.camera, this.selectedId, this.spriteTint);
     this.followStep(now);
     const q = fillWater(w, this.waterPos, now, this.waterCol);
     this.water.geometry.setDrawRange(0, q * 6);
@@ -271,6 +271,7 @@ export class Renderer3D implements GameView {
     this.updateMood();
     this.fx.update(now, this.target);
     this.fx.applyLight(this.sun, this.hemi, this.scene.background as Color | null);
+    this.updateSpriteTint();
     this.updateOverlays();
     this.gl.render(this.scene, this.camera);
   }
@@ -289,6 +290,18 @@ export class Renderer3D implements GameView {
     this.target.z += (p.y - this.target.z) * k;
     this.target.y += (this.world.groundZ(p.x, p.y) * HS - this.target.y) * k;
     this.placeCamera();
+  }
+
+  private spriteTint = new Color(1, 1, 1);
+  /** Luz dos sprites: soma das luzes da cena, normalizada para o dia claro ficar com as cores originais. */
+  private updateSpriteTint(): void {
+    const t = this.spriteTint;
+    t.setRGB(0, 0, 0);
+    t.r = this.sun.color.r * this.sun.intensity * 0.5 + this.hemi.color.r * this.hemi.intensity * 0.65;
+    t.g = this.sun.color.g * this.sun.intensity * 0.5 + this.hemi.color.g * this.hemi.intensity * 0.65;
+    t.b = this.sun.color.b * this.sun.intensity * 0.5 + this.hemi.color.b * this.hemi.intensity * 0.65;
+    t.multiplyScalar(1 / 1.1);
+    t.r = Math.min(1.15, t.r); t.g = Math.min(1.15, t.g); t.b = Math.min(1.15, t.b);
   }
 
   private updateMood(): void {
