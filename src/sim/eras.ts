@@ -61,6 +61,7 @@ export const ERAS: Era[] = [
       { label: 'serraria', icon: '🪚', have: built('sawmill'), need: 1, kind: 'sawmill' },
       { label: 'pedreira', icon: '⛏', have: built('quarry'), need: 1, kind: 'quarry' },
       { label: 'mercados', icon: '🏪', have: built('market'), need: 2, kind: 'market' },
+      { label: "roda d'água", icon: '⚡', have: built('waterwheel'), need: 1, kind: 'waterwheel' },
     ],
     perks: '+35% de coleta · +1 morador por casa',
   },

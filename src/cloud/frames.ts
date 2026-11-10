@@ -29,7 +29,7 @@ export interface LightFrame {
 }
 
 const STATES: VillagerState[] = ['idle', 'toTarget', 'working', 'toStore'];
-const KINDS: BuildingKind[] = ['townhall', 'house', 'farm', 'well', 'sawmill', 'quarry', 'warehouse', 'dam', 'bridge', 'market'];
+const KINDS: BuildingKind[] = ['townhall', 'house', 'farm', 'well', 'sawmill', 'quarry', 'warehouse', 'dam', 'bridge', 'market', 'waterwheel'];
 const WATER_SCALE = 32;
 const N = GRID_W * GRID_H;
 

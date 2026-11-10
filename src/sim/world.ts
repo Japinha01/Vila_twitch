@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, WAITLIST_MAX, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -127,6 +127,8 @@ export class World {
   private springs: number[] = []; // nascentes criadas pelo streamer
   waitlistOn = true; // com a vila cheia, quem usa !entrar entra na fila em vez de ser recusado
   waitlist: { userId: string; name: string; color: string }[] = [];
+  /** energia das rodas d'água: oferta, demanda e a razão (0 a 1) que vira bônus nos prédios movidos a ela */
+  power = { supply: 0, demand: 0, ratio: 0 };
   axes = 0; // machados fabricados (aceleram a lenha)
   picks = 0; // picaretas fabricadas (aceleram a pedra)
   private canals = 0; // canais cavados pelos aldeões
@@ -747,6 +749,7 @@ export class World {
   step(): void {
     this.tick++;
     if (this.tick % 50 === 0) this.checkEra();
+    if (this.tick % 10 === 0) this.updatePower();
     if (this.waitlist.length && this.tick % 20 === 0) this.admitWaiting();
     if (this.autonomy && this.tick % AUTONOMY_EVERY === 0) this.autonomyStep();
     for (const v of this.villagers) {
@@ -772,7 +775,7 @@ export class World {
   }
 
   private consume(): void {
-    const relief = Math.min(MARKET_RELIEF_MAX, this.working('market') * MARKET_RELIEF); // o comércio abastece melhor
+    const relief = Math.min(MARKET_RELIEF_MAX, this.working('market') * MARKET_RELIEF * (1 + POWER_BONUS * this.power.ratio)); // o comércio abastece melhor
     const n = Math.ceil(this.villagers.length * (1 - relief));
     this.stock.food = Math.max(0, this.stock.food - n);
     this.stock.water = Math.max(0, this.stock.water - n);
@@ -1055,8 +1058,9 @@ export class World {
     if (res === 'wood' || res === 'stone') amt *= eraGather(this.era);
     if (res === 'wood') amt *= 1 + TOOL_BONUS * this.toolCoverage(this.axes);
     if (res === 'stone') amt *= 1 + TOOL_BONUS * this.toolCoverage(this.picks);
-    if (res === 'wood' && this.working('sawmill') > 0) amt *= SAWMILL_BONUS;
-    if (res === 'stone' && this.working('quarry') > 0) amt *= QUARRY_BONUS;
+    const boost = 1 + POWER_BONUS * this.power.ratio; // energia das rodas d'água
+    if (res === 'wood' && this.working('sawmill') > 0) amt *= SAWMILL_BONUS * boost;
+    if (res === 'stone' && this.working('quarry') > 0) amt *= QUARRY_BONUS * boost;
     amt = Math.round(amt);
     const node = this.nodes.find((n) => n.id === v.targetId);
     if (node) {
@@ -1321,7 +1325,7 @@ export class World {
     const hall = this.townHall();
     const cx = hall.x + hall.w / 2, cy = hall.y + hall.h / 2;
     const { w, h } = BUILDINGS[kind];
-    const maxD = kind === 'quarry' ? QUARRY_MAX_DIST : kind === 'farm' || kind === 'well' ? 22 : AUTO_BUILD_MAX_DIST;
+    const maxD = kind === 'quarry' || kind === 'waterwheel' ? QUARRY_MAX_DIST : kind === 'farm' || kind === 'well' ? 22 : AUTO_BUILD_MAX_DIST;
     const rocks = kind === 'quarry' ? this.nodes.filter((n) => n.kind === 'rock' && this.nodeHarvestable(n)) : [];
     let best: { x: number; y: number } | null = null;
     let bs = Infinity;
@@ -1335,7 +1339,7 @@ export class World {
         if (score >= bs) continue;
         if (!this.spotOk(kind, x, y) || !this.roomAround(x, y, w, h)) continue;
         if (this.zoned(x, y, w, h)) continue; // terra zoneada é reservada para o tipo certo
-        if (kind !== 'farm' && kind !== 'well' && this.irrigated[this.idx(x, y)] === 1) continue; // terra irrigada fica para fazendas
+        if (kind !== 'farm' && kind !== 'well' && kind !== 'waterwheel' && this.irrigated[this.idx(x, y)] === 1) continue; // terra irrigada fica para fazendas
         best = { x, y }; bs = score;
       }
     }
@@ -1361,6 +1365,9 @@ export class World {
     if (RESOURCES.some((r) => fr(r) >= 0.9) && this.countKind('warehouse') < Math.ceil(houses / 3)) needs.push({ kind: 'warehouse', art: 'um', name: 'armazém', why: 'o estoque estava cheio' });
     if (houses >= 4 && this.countKind('market') < Math.floor(houses / 4)) needs.push({ kind: 'market', art: 'um', name: 'mercado', why: 'a cidade pedia comércio' });
     if (pop >= 8 && this.stock.wood < 30 && this.countKind('sawmill') === 0) needs.push({ kind: 'sawmill', art: 'uma', name: 'serraria', why: 'faltava madeira' });
+    if (this.power.demand > 0 && this.power.supply < this.power.demand && this.countKind('waterwheel') < 1 + Math.floor(houses / 8) && !this.buildings.some((b) => b.kind === 'waterwheel' && !b.done)) {
+      needs.push({ kind: 'waterwheel', art: 'uma', name: "roda d'água", why: 'as máquinas precisavam de energia' });
+    }
     if (this.stock.stone < 20 && this.countKind('quarry') === 0) needs.push({ kind: 'quarry', art: 'uma', name: 'pedreira', why: 'faltava pedra' });
     // metas da próxima era que pedem prédios de apoio: constroem quando a população já está perto da meta
     const nextEra = ERAS[this.era + 1];
@@ -1377,7 +1384,7 @@ export class World {
     for (const n of needs) {
       let site = this.findSite(n.kind);
       if (!site && n.kind === 'farm') this.needIrrigation = true; // sem terra irrigada livre: cavam um canal
-      if (!site && !(this.zoneFor(n.kind) && this.hasZone(this.zoneFor(n.kind))) && n.kind !== 'farm' && n.kind !== 'well' && n.kind !== 'quarry') {
+      if (!site && !(this.zoneFor(n.kind) && this.hasZone(this.zoneFor(n.kind))) && n.kind !== 'farm' && n.kind !== 'well' && n.kind !== 'quarry' && n.kind !== 'waterwheel') {
         site = this.autoLevel(n.kind); // sem lugar plano: aplainam um terreno
         if (site) { this.events.push(`⛏ Os aldeões aplainaram um terreno para ${n.art} ${n.name}.`); return; } // constroem na próxima rodada
       }
@@ -1427,6 +1434,15 @@ export class World {
         if (kind !== 'quarry' && this.mine[t]) return false; // a jazida é reservada para a pedreira
         if (this.channel[t] || this.water[t] > 0.05 || this.height[t] !== h0) return false;
       }
+    }
+    if (kind === 'waterwheel') { // na margem: pelo menos 3 tiles de água encostados nela
+      let wet = 0;
+      for (let j = -1; j <= h; j++) for (let i = -1; i <= w; i++) {
+        if (i >= 0 && i < w && j >= 0 && j < h) continue;
+        const tx = x + i, ty = y + j;
+        if (tx >= 0 && ty >= 0 && tx < GRID_W && ty < GRID_H && this.water[this.idx(tx, ty)] > 0.3) wet++;
+      }
+      if (wet < 3) return false;
     }
     if (kind === 'quarry') {
       let onMine = 0;
@@ -1604,6 +1620,28 @@ export class World {
         }
       }
     }
+  }
+
+  /** Quanto a roda rende agora (0 a 1): depende da água em volta (some na seca). */
+  wheelFlow(b: Building): number {
+    let wet = 0;
+    for (let j = -1; j <= b.h; j++) for (let i = -1; i <= b.w; i++) {
+      if (i >= 0 && i < b.w && j >= 0 && j < b.h) continue;
+      const x = b.x + i, y = b.y + j;
+      if (x < 0 || y < 0 || x >= GRID_W || y >= GRID_H) continue;
+      wet += Math.min(1, this.water[this.idx(x, y)]);
+    }
+    return Math.min(1, wet / POWER_WATER_FULL);
+  }
+
+  private updatePower(): void {
+    let supply = 0, demand = 0;
+    for (const b of this.buildings) {
+      if (!b.done || b.flooded) continue;
+      if (b.kind === 'waterwheel') supply += POWER_SUPPLY[Math.min(this.era, POWER_SUPPLY.length - 1)] * this.wheelFlow(b);
+      else if (b.kind === 'sawmill' || b.kind === 'quarry' || b.kind === 'market') demand += POWER_DEMAND[b.kind] ?? 0;
+    }
+    this.power = { supply: Math.round(supply * 10) / 10, demand, ratio: demand > 0 ? Math.min(1, supply / demand) : 0 };
   }
 
   private mineUnder(x: number, y: number, w: number, h: number): boolean {

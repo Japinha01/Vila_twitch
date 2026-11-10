@@ -416,11 +416,77 @@ function market(): Group {
   return g;
 }
 
-const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well, sawmill, quarry, warehouse, dam, bridge, market };
+/** Roda d'água → roda de ferro → turbina → usina, conforme a era. `userData.wheel` gira (o scenesync anima). */
+export const wheelTier = (era: number): 0 | 1 | 2 | 3 => (era <= 2 ? 0 : era <= 4 ? 1 : era <= 6 ? 2 : 3);
+function waterwheel(tier: 0 | 1 | 2 | 3 = 0): Group {
+  const g = new Group();
+  const wheel = new Group();
+  const metal = tier >= 1;
+  const rimCol = metal ? '#868e96' : COLORS.woodDark;
+  const padCol = metal ? '#adb5bd' : COLORS.wood;
+  const r = tier >= 2 ? 0.45 : 0.55;
+  for (const dx of [-0.07, 0.07]) {
+    const rim = cyl(mat(rimCol), r, r, 0.04, 14, dx, -0.02, 0);
+    rim.rotation.z = Math.PI / 2;
+    wheel.add(rim);
+  }
+  const hub = cyl(mat('#495057'), 0.09, 0.09, 0.2, 8, 0, 0, 0);
+  hub.rotation.z = Math.PI / 2;
+  wheel.add(hub);
+  const blades = tier >= 2 ? 10 : 8;
+  for (let k = 0; k < blades; k++) {
+    const a = (k / blades) * Math.PI * 2;
+    const pad = box(mat(padCol), 0.16, 0.1, 0.34, 0, 0, 0);
+    pad.position.set(0, Math.sin(a) * (r - 0.1), Math.cos(a) * (r - 0.1));
+    pad.rotation.x = a;
+    wheel.add(pad);
+  }
+  wheel.position.set(0.82, r + 0.08, 0.1);
+  g.add(wheel);
+  g.userData.wheel = wheel;
+  g.add(box(mat(COLORS.stoneDark), 0.12, r + 0.1, 0.12, 0.82, 0, 0.1 - r - 0.1)); // suporte
+  g.add(box(mat('#8a7f72'), 1.9, 0.06, 1.9, 0, 0, 0)); // piso
+  if (tier === 0) { // moinho de madeira com telhado de palha
+    g.add(box(mat(COLORS.wood), 1.1, 0.7, 1.1, -0.35, 0.06, -0.3));
+    g.add(gable(mat(COLORS.thatch), 1.35, 0.55, 1.3, -0.35, 0.76, -0.3, Math.PI / 2));
+    g.add(box(mat(COLORS.door), 0.28, 0.42, 0.06, -0.35, 0.06, 0.26));
+    g.add(box(mat(COLORS.woodDark), 0.5, 0.06, 0.1, 0.5, 0.5, 0.1)); // eixo até a roda
+  } else if (tier === 1) { // casa de tijolos com gerador e poste
+    g.add(box(mat(COLORS.brick), 1.1, 0.75, 1.1, -0.35, 0.06, -0.3));
+    g.add(gable(mat(COLORS.slate), 1.35, 0.5, 1.3, -0.35, 0.81, -0.3, Math.PI / 2));
+    g.add(box(mat('#212529'), 0.3, 0.4, 0.06, -0.35, 0.06, 0.26));
+    g.add(box(mat('#c2410c'), 0.3, 0.3, 0.3, 0.3, 0.06, -0.55)); // gerador
+    g.add(cyl(mat('#74481f'), 0.04, 0.04, 1.2, 5, -0.85, 0.06, 0.6));
+    g.add(box(mat('#74481f'), 0.5, 0.05, 0.05, -0.85, 1.1, 0.6));
+  } else if (tier === 2) { // casa de turbina de concreto, tubulação e transformador
+    g.add(box(mat('#ced4da'), 1.2, 0.85, 1.1, -0.35, 0.06, -0.3));
+    g.add(box(mat('#868e96'), 1.26, 0.08, 1.16, -0.35, 0.91, -0.3));
+    g.add(box(mat('#4ab3f0'), 0.8, 0.22, 0.04, -0.35, 0.5, 0.26)); // janelão
+    const pipe = cyl(mat('#6c757d'), 0.12, 0.12, 1.0, 8, 0.4, 0.2, -0.6);
+    pipe.rotation.z = Math.PI / 2;
+    g.add(pipe);
+    g.add(box(mat('#495057'), 0.3, 0.45, 0.3, 0.6, 0.06, -0.6)); // transformador
+    for (const x of [-0.85, -0.65]) g.add(cyl(mat('#adb5bd'), 0.03, 0.03, 1.3, 4, x, 0.06, 0.65));
+    g.add(box(mat('#adb5bd'), 0.5, 0.04, 0.04, -0.75, 1.3, 0.65));
+  } else { // usina hidrelétrica: bloco moderno com arco de vidro, torres de transmissão e luzes
+    g.add(box(mat('#e9ecef'), 1.3, 0.95, 1.2, -0.35, 0.06, -0.3));
+    g.add(box(mat('#4ab3f0'), 1.1, 0.4, 0.05, -0.35, 0.45, 0.31));
+    g.add(box(mat('#1c3d6e'), 1.3, 0.1, 1.2, -0.35, 1.01, -0.3));
+    g.add(box(mat('#22b8cf'), 0.9, 0.04, 0.5, -0.35, 1.11, -0.2)); // painel solar
+    for (const [x, z] of [[-0.85, 0.7], [0.1, 0.8]] as const) {
+      g.add(cyl(mat('#adb5bd'), 0.025, 0.05, 1.5, 4, x, 0.06, z));
+      g.add(box(mat('#adb5bd'), 0.6, 0.04, 0.04, x, 1.35, z), box(mat('#fcc419'), 0.07, 0.07, 0.07, x + 0.3, 1.45, z), box(mat('#fcc419'), 0.07, 0.07, 0.07, x - 0.3, 1.45, z));
+    }
+    g.add(box(mat('#495057'), 0.35, 0.5, 0.35, 0.6, 0.06, -0.62));
+  }
+  return g;
+}
+
+const MAKERS: Record<BuildingKind, () => Group> = { townhall, house, farm, well, sawmill, quarry, warehouse, dam, bridge, market, waterwheel };
 /** Na Era da Pedra e do Bronze o centro é uma fogueira; a prefeitura vem na Era Medieval. */
 export const hallStage = (era: number): 'fogueira' | 'prefeitura' | 'governo' => (era < 2 ? 'fogueira' : era < 5 ? 'prefeitura' : 'governo');
 /** Etapa visual de um prédio (muda de modelo quando a era faz ele evoluir): '' se nunca muda. */
-export const buildingStage = (kind: BuildingKind, era: number): string => (kind === 'townhall' ? hallStage(era) : kind === 'house' ? String(houseTier(era)) : '');
+export const buildingStage = (kind: BuildingKind, era: number): string => (kind === 'townhall' ? hallStage(era) : kind === 'house' ? String(houseTier(era)) : kind === 'waterwheel' ? String(wheelTier(era)) : '');
 const bakedMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
 
 /**
@@ -429,7 +495,7 @@ const bakedMat = new MeshLambertMaterial({ vertexColors: true, flatShading: true
  */
 function bake(src: Group): Group {
   const keep = new Set<Object3D>();
-  for (const key of ['rows', 'water']) { const o = src.userData[key] as Object3D | undefined; if (o) keep.add(o); }
+  for (const key of ['rows', 'water', 'wheel']) { const o = src.userData[key] as Object3D | undefined; if (o) keep.add(o); }
   src.updateMatrixWorld(true);
   const parts: BufferGeometry[] = [];
   src.traverse((o) => {
@@ -459,5 +525,6 @@ export const makeBuilding = (kind: BuildingKind, era = 0): Group => {
   if (kind === 'townhall' && hallStage(era) === 'fogueira') return bake(campfire());
   if (kind === 'townhall' && hallStage(era) === 'governo') return bake(capitol());
   if (kind === 'house') return bake(house(houseTier(era)));
+  if (kind === 'waterwheel') return bake(waterwheel(wheelTier(era)));
   return bake(MAKERS[kind]());
 };

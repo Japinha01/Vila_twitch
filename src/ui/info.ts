@@ -27,6 +27,8 @@ export function describeTile(w: World, x: number, y: number): string[] {
       if (b.flooded) out.push('🌊 Alagado: parado até secar');
       const slots = b.kind === 'townhall' ? undefined : BUILDINGS[b.kind as PlaceableKind].slots;
       if (slots) out.push(`Trabalhadores ${w.workersAt(b)}/${slots}`);
+      if (b.kind === 'waterwheel') out.push(`⚡ Rende ${Math.round(w.wheelFlow(b) * 100)}% da força (energia da vila ${w.power.supply}/${w.power.demand})`);
+      else if (b.kind === 'sawmill' || b.kind === 'quarry' || b.kind === 'market') out.push(w.power.ratio > 0 ? `⚡ Com energia: +${Math.round(w.power.ratio * 50)}%` : '⚡ Sem energia (uma roda d\'água ajuda)');
       if ((b.kind === 'farm' || b.kind === 'well') && !b.flooded && !w.buildingWorks(b)) {
         out.push(b.kind === 'farm' ? '☀ Sem irrigação: não produz' : '☀ Sem água por perto: não rende');
       }
