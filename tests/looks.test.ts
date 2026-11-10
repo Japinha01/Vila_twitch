@@ -54,3 +54,20 @@ describe('visual do viewer (M6)', () => {
     expect(w2.findVillager('9')!.look).toEqual({ hair: 7 });
   });
 });
+
+import { twitchIdOf, visibleLook } from '../src/sim/looks';
+describe('visual global (página ?conta)', () => {
+  it('chapéu e moldura só aparecem com o XP daquela vila', () => {
+    const l = { shirt: 1, hat: 'cartola' as const, frame: 'ouro' as const };
+    expect(visibleLook(l, 0)).toEqual({ shirt: 1 });
+    expect(visibleLook(l, 400)).toEqual({ shirt: 1, hat: 'cartola' });
+    expect(visibleLook(l, 5000)).toBe(l);
+    expect(visibleLook(undefined, 10)).toBeUndefined();
+  });
+  it('lê o ID da Twitch só da identidade de login e só se for numérico', () => {
+    expect(twitchIdOf({ identities: [{ provider: 'github', id: '9' }, { provider: 'twitch', id: '12345' }] })).toBe('12345');
+    expect(twitchIdOf({ identities: [], user_metadata: { provider_id: '777' } })).toBe('777');
+    expect(twitchIdOf({ identities: [{ provider: 'twitch', id: 'abc' }] })).toBeNull();
+    expect(twitchIdOf(null)).toBeNull();
+  });
+});

@@ -3,6 +3,7 @@ import type { Profile, SaveData } from '../sim/world';
 import { fromProfileRows, toProfileRows } from './rows';
 import { parseVillageRanks, parseViewerRanks, RANK_LIST_SIZE, toVillageRankRow, toViewerRankRows, type ViewerRank, type VillageRank } from './ranking';
 import type { AchStats } from '../sim/achievements';
+import { sanitizeLook, twitchIdOf, type Look } from '../sim/looks';
 
 import { getSupabase } from './client';
 
@@ -69,6 +70,35 @@ export class Cloud {
       ({ error } = await this.db.from('profiles').upsert(rows.map(({ coins: _c, look: _l, ...r }) => r), { onConflict: 'owner,twitch_id' }));
     }
     if (error) throw error;
+  }
+
+  /** ID da Twitch de quem está logado (para a página de conta do viewer). */
+  get twitchId(): string | null { return twitchIdOf(this.session?.user as never); }
+
+  async loadMyLook(): Promise<Look | undefined> {
+    const id = this.twitchId;
+    if (!id) return undefined;
+    const { data, error } = await this.db.from('viewer_looks').select('look').eq('twitch_id', id).maybeSingle();
+    if (error) throw error;
+    return sanitizeLook(data?.look);
+  }
+
+  async saveMyLook(look: Look): Promise<void> {
+    const id = this.twitchId, owner = this.userId;
+    if (!id || !owner) throw new Error('não está logado com a Twitch');
+    const { error } = await this.db.from('viewer_looks').upsert({ twitch_id: id, owner, look: sanitizeLook(look) ?? {}, updated_at: new Date().toISOString() }, { onConflict: 'twitch_id' });
+    if (error) throw error;
+  }
+
+  /** Visuais globais dos viewers (leitura pública, não precisa de login). */
+  async loadLooks(ids: string[]): Promise<Map<string, Look>> {
+    const out = new Map<string, Look>();
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data, error } = await this.db.from('viewer_looks').select('twitch_id, look').in('twitch_id', ids.slice(i, i + 100));
+      if (error) throw error;
+      for (const r of data ?? []) { const l = sanitizeLook(r.look); if (l) out.set(String(r.twitch_id), l); }
+    }
+    return out;
   }
 
   /** Publica a vila e os melhores viewers no ranking público. Lança erro se as tabelas (supabase/ranking.sql) não existirem. */

@@ -98,3 +98,23 @@ export function sanitizeLook(raw: unknown): Look | undefined {
 export function unlockedFor(xp: number): { hats: string[]; frames: string[] } {
   return { hats: HATS.filter((h) => xp >= h.xp).map((h) => h.label), frames: FRAMES.filter((f) => xp >= f.xp).map((f) => f.label) };
 }
+
+/** O que realmente aparece na vila: chapéu e moldura só valem se o XP daquele viewer, ali, já os liberou. */
+export function visibleLook(look: Look | undefined, xp: number): Look | undefined {
+  if (!look) return look;
+  const hat = HATS.find((h) => h.id === look.hat);
+  const frame = FRAMES.find((f) => f.id === look.frame);
+  if ((!hat || xp >= hat.xp) && (!frame || xp >= frame.xp)) return look;
+  const out: Look = { ...look };
+  if (hat && xp < hat.xp) delete out.hat;
+  if (frame && xp < frame.xp) delete out.frame;
+  return out;
+}
+
+/** ID da Twitch de um usuário do Supabase (só dígitos; vem da identidade de login). */
+export function twitchIdOf(user: { identities?: { provider?: string; id?: string }[] | null; user_metadata?: Record<string, unknown> } | null | undefined): string | null {
+  const fromIdentity = user?.identities?.find((i) => i.provider === 'twitch')?.id;
+  const meta = user?.user_metadata ?? {};
+  const raw = String(fromIdentity ?? meta.provider_id ?? meta.sub ?? '');
+  return /^\d{1,20}$/.test(raw) ? raw : null;
+}
