@@ -12,8 +12,8 @@ describe('ferramentas', () => {
     for (let i = 0; i < 3; i++) w.addVillager(`u${i}`, `V${i}`, '#fff');
     w.stock.wood = 400; w.stock.stone = 200; w.stock.food = 400; w.stock.water = 400;
     run(w, AUTONOMY_EVERY * 40);
-    expect(w.axes).toBeLessThanOrEqual(3);
-    expect(w.picks).toBeLessThanOrEqual(3);
+    expect(w.axes).toBeLessThanOrEqual(w.villagers.length); // filhos de casais também contam
+    expect(w.picks).toBeLessThanOrEqual(w.villagers.length);
     expect(w.axes + w.picks).toBeGreaterThan(0);
     expect(w.drainEvents().some((e) => e.includes('fabricaram'))).toBe(true);
   });

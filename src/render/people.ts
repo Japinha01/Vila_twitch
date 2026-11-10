@@ -110,16 +110,17 @@ export class People {
       const y = world.groundZ(q.x, q.y) * HS + bob;
       const c = this.colorsFor(v);
       const cs = Math.cos(f.a), sn = Math.sin(f.a);
-      const at3 = (lx: number, ly: number, lz: number): void => { d.position.set(q.x + cs * lx + sn * lz, y + ly, q.y - sn * lx + cs * lz); };
+      const sc = v.kid ? 0.68 : 1;
+      const at3 = (lx: number, ly: number, lz: number): void => { d.position.set(q.x + (cs * lx + sn * lz) * sc, y + ly * sc, q.y + (-sn * lx + cs * lz) * sc); };
 
-      d.scale.set(1, 1, 1);
+      d.scale.setScalar(sc);
       d.rotation.set(0, f.a, 0);
       at3(0, 0.285, 0); d.updateMatrix(); this.torso.setMatrixAt(i, d.matrix); this.torso.setColorAt(i, c.shirt);
       at3(0, 0.46, 0); d.updateMatrix(); this.heads.setMatrixAt(i, d.matrix); this.heads.setColorAt(i, c.skin);
       at3(0, 0.465, -0.012); d.updateMatrix(); this.hair.setMatrixAt(i, d.matrix); this.hair.setColorAt(i, c.hair);
       const crown = !v.npc && world.isLeader(v);
-      at3(0, 0.575, 0); d.scale.setScalar(crown ? 1 : 0.0001); d.updateMatrix(); this.crowns.setMatrixAt(i, d.matrix);
-      d.scale.set(1, 1, 1);
+      at3(0, 0.575, 0); d.scale.setScalar(crown ? sc : 0.0001); d.updateMatrix(); this.crowns.setMatrixAt(i, d.matrix);
+      d.scale.setScalar(sc);
 
       const swing = moving ? Math.sin(phase) * 0.7 : 0;
       for (let s = -1; s <= 1; s += 2) {
@@ -130,9 +131,9 @@ export class People {
       }
 
       d.rotation.set(0, f.a, 0);
-      at3(-0.13, 0.3, 0.05); d.scale.setScalar(v.carryRes ? 1 : 0.0001); d.updateMatrix(); this.loads.setMatrixAt(i, d.matrix);
+      at3(-0.13, 0.3, 0.05); d.scale.setScalar(v.carryRes ? sc : 0.0001); d.updateMatrix(); this.loads.setMatrixAt(i, d.matrix);
       this.loads.setColorAt(i, this.tmp.set(v.carryRes ? LOAD_COLOR[v.carryRes] : '#ffffff'));
-      d.scale.set(1, 1, 1);
+      d.scale.setScalar(sc);
 
       const ji = JOBS.indexOf(v.job);
       const tm = this.tools[ji];

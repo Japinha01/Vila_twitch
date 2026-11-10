@@ -158,3 +158,14 @@ export const STORE_GIVE_UP = 4; // tentativas seguidas sem caminho até o depós
 
 export const CROWD_COST = 0.5; // custo extra de rota por aldeão parado ou andando no tile (até CROWD_MAX), para os caminhos se espalharem
 export const CROWD_MAX = 4;
+
+// relações entre aldeões
+export const BOND_EVERY = 20; // passos entre as rodadas de convivência (2 s)
+export const BOND_RADIUS = 1; // tiles de distância (vizinhos) que contam como "perto"
+export const FRIEND_AT = 40; // afinidade para virar amigos
+export const COUPLE_AT = 140; // afinidade para amigos virarem casal
+export const FRIENDS_MAX = 3;
+export const BIRTH_EVERY = 600; // passos entre tentativas de nascimento por casal (1 min)
+export const BIRTH_CHANCE = 0.3;
+export const KIDS_MAX = 2; // filhos por casal
+export const KID_GROW_TICKS = 6000; // criança vira adulta (10 min a x1)

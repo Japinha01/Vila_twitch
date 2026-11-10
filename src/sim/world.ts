@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, STORE_GIVE_UP, CROWD_COST, CROWD_MAX, AUTO_FILL_ROUNDS, AUTO_DEMOLISH_ROUNDS, AUTO_DEMOLISH_MAX, DIG_COST, NPC_EVERY, NPC_MIN, NPC_NAMES, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, BOND_EVERY, BOND_RADIUS, FRIEND_AT, COUPLE_AT, FRIENDS_MAX, BIRTH_EVERY, BIRTH_CHANCE, KIDS_MAX, KID_GROW_TICKS, STORE_GIVE_UP, CROWD_COST, CROWD_MAX, AUTO_FILL_ROUNDS, AUTO_DEMOLISH_ROUNDS, AUTO_DEMOLISH_MAX, DIG_COST, NPC_EVERY, NPC_MIN, NPC_NAMES, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, WAITLIST_MAX, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -739,17 +739,20 @@ export class World {
   /** Remove um aldeão (streamer ou moderador). Ele pode voltar com !entrar. */
   /** Viewer tem prioridade: com a vila cheia, um morador NPC dá lugar a ele. */
   private makeRoomForViewer(): boolean {
-    for (let i = this.villagers.length - 1; i >= 0; i--) {
-      if (!this.villagers[i].npc) continue;
-      const v = this.villagers[i];
-      for (const b of this.buildings) if (b.owner === v.userId) delete b.owner;
-      this.villagers.splice(i, 1);
-      return true;
+    // primeiro NPC adulto; criança só se não houver outro jeito
+    for (const kid of [false, true]) {
+      for (let i = this.villagers.length - 1; i >= 0; i--) {
+        const v = this.villagers[i];
+        if (!v.npc || !!v.kid !== kid) continue;
+        for (const b of this.buildings) if (b.owner === v.userId) delete b.owner;
+        this.villagers.splice(i, 1);
+        return true;
+      }
     }
     return false;
   }
 
-  get npcCount(): number { return this.villagers.filter((v) => v.npc).length; }
+  get npcCount(): number { return this.villagers.filter((v) => v.npc && !v.kid).length; }
 
   /**
    * Moradores NPC "se preciso": quando falta gente para a meta de população da próxima era, há casa livre,
@@ -917,6 +920,7 @@ export class World {
       for (const v of this.villagers) { const t = this.tileOf(v.x, v.y); if (this.crowd[t] < 255) this.crowd[t]++; }
     }
     if (this.tick % 10 === 0) { this.updatePower(); this.updateProfessions(); }
+    if (this.tick % BOND_EVERY === 0) this.updateBonds();
     if (this.waitlist.length && this.tick % 20 === 0) this.admitWaiting();
     if (this.autonomy && this.tick % AUTONOMY_EVERY === 0) this.autonomyStep();
     for (const v of this.villagers) {
@@ -1890,6 +1894,98 @@ export class World {
       b.owner = owner.userId;
       if (b.kind === 'house') houseOwners.add(owner.userId);
     }
+  }
+
+  // ---------- amizades e famílias ----------
+  /** Convivência: quem fica perto ganha afinidade; amigos viram casal; casais têm filhos NPC. Determinístico. */
+  private updateBonds(): void {
+    const alive = new Map(this.villagers.map((v) => [v.userId, v]));
+    // limpa vínculos com quem saiu da vila
+    for (const v of this.villagers) {
+      if (v.friends) v.friends = v.friends.filter((id) => alive.has(id));
+      if (v.partner && !alive.has(v.partner)) delete v.partner;
+      if (v.bond) for (const id of Object.keys(v.bond)) if (!alive.has(id)) delete v.bond[id];
+    }
+    // quem está perto de quem (grade por tile)
+    const grid = new Map<number, Villager[]>();
+    for (const v of this.villagers) {
+      const t = this.tileOf(v.x, v.y);
+      const l = grid.get(t);
+      if (l) l.push(v); else grid.set(t, [v]);
+    }
+    for (const v of this.villagers) {
+      if (v.kid) continue;
+      const tx = Math.floor(v.x), ty = Math.floor(v.y);
+      for (let dy = -BOND_RADIUS; dy <= BOND_RADIUS; dy++) for (let dx = -BOND_RADIUS; dx <= BOND_RADIUS; dx++) {
+        const nx = tx + dx, ny = ty + dy;
+        if (nx < 0 || ny < 0 || nx >= GRID_W || ny >= GRID_H) continue;
+        for (const o of grid.get(this.idx(nx, ny)) ?? []) {
+          if (o.id <= v.id || o.kid) continue; // cada par uma vez
+          this.addBond(v, o);
+        }
+      }
+    }
+    // nascimentos
+    if (this.tick % BIRTH_EVERY === 0) this.maybeBirths(alive);
+    // crianças crescem
+    for (const v of this.villagers) {
+      if (v.kid && this.tick - (v.born ?? 0) >= KID_GROW_TICKS) {
+        delete v.kid;
+        this.events.push(`🎓 ${v.name} cresceu e virou adulto.`);
+      }
+    }
+  }
+
+  private addBond(a: Villager, b: Villager): void {
+    for (const [x, y] of [[a, b], [b, a]] as [Villager, Villager][]) {
+      x.bond ??= {};
+      x.bond[y.userId] = (x.bond[y.userId] ?? 0) + 1;
+      const keys = Object.keys(x.bond);
+      if (keys.length > 8) { // guarda só os 8 mais fortes
+        keys.sort((p, q) => x.bond![q] - x.bond![p]);
+        for (const k of keys.slice(8)) delete x.bond[k];
+      }
+    }
+    const ab = a.bond![b.userId];
+    if (ab >= FRIEND_AT && !(a.friends ?? []).includes(b.userId) && (a.friends?.length ?? 0) < FRIENDS_MAX && (b.friends?.length ?? 0) < FRIENDS_MAX) {
+      (a.friends ??= []).push(b.userId);
+      (b.friends ??= []).push(a.userId);
+      this.events.push(`🤝 ${a.name} e ${b.name} viraram amigos.`);
+    }
+    if (ab >= COUPLE_AT && !a.partner && !b.partner && (a.friends ?? []).includes(b.userId)) {
+      a.partner = b.userId;
+      b.partner = a.userId;
+      this.events.push(`💞 ${a.name} e ${b.name} começaram a namorar.`);
+    }
+  }
+
+  private maybeBirths(alive: Map<string, Villager>): void {
+    if (this.waitlist.length) return;
+    for (const v of [...this.villagers].sort((x, y) => x.id - y.id)) {
+      if (!v.partner || v.kid || this.villagers.length >= this.popCap) continue;
+      const p = alive.get(v.partner);
+      if (!p || p.id < v.id) continue; // cada casal uma vez
+      const kids = this.villagers.filter((k) => k.kid && k.parents && k.parents.includes(v.userId)).length;
+      if (kids >= KIDS_MAX || this.rng() >= BIRTH_CHANCE) continue;
+      const nid = this.nextId;
+      const r = this.addVillager(`npc:${nid}`, `${NPC_NAMES[nid % NPC_NAMES.length]} ${v.name.slice(0, 1).toUpperCase()}.`, World.colorFor(`npc:${nid}`));
+      if (!r.ok) continue;
+      Object.assign(r.villager, { npc: true, kid: true, parents: [v.userId, p.userId], born: this.tick, x: v.x, y: v.y });
+      this.events.push(`👶 ${v.name} e ${p.name} tiveram um filho: ${r.villager.name}!`);
+    }
+  }
+
+  /** Resumo das relações de um viewer (para !amigos). */
+  relationsOf(userId: string): { friends: string[]; partner?: string; kids: string[]; parents?: string[] } {
+    const v = this.findVillager(userId);
+    const name = (id: string): string => this.findVillager(id)?.name ?? '?';
+    if (!v) return { friends: [], kids: [] };
+    return {
+      friends: (v.friends ?? []).map(name),
+      partner: v.partner ? name(v.partner) : undefined,
+      kids: this.villagers.filter((k) => k.parents?.includes(userId)).map((k) => k.name),
+      parents: v.parents?.map(name),
+    };
   }
 
   /** Estabelecimentos de um viewer (para o !meus). */

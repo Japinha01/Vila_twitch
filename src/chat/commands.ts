@@ -18,6 +18,7 @@ export type Command =
   | { name: 'livre' }
   | { name: 'profissao' }
   | { name: 'meus' }
+  | { name: 'amigos' }
   | { name: 'apoiar' };
 
 type ParseResult = { ok: true; cmd: Command } | { ok: false; error?: string };
@@ -28,7 +29,7 @@ const RES_ALIAS: Record<string, Job> = {
 
 /** Cooldown por viewer e por comando, em ms de relógio real. */
 export const COOLDOWN_MS: Record<Command['name'], number> = {
-  entrar: 5000, fila: 5000, trabalhar: 5000, livre: 5000, status: 5000, profissao: 5000, meus: 5000, vila: 10000, apoiar: 60000,
+  entrar: 5000, fila: 5000, trabalhar: 5000, livre: 5000, status: 5000, profissao: 5000, meus: 5000, amigos: 5000, vila: 10000, apoiar: 60000,
 };
 
 /** Etapa 1 do pipeline: validação (sintaxe e argumentos). */
@@ -43,6 +44,7 @@ export function parseCommand(text: string): ParseResult {
     case 'status': return { ok: true, cmd: { name: 'status' } };
     case 'profissao': return { ok: true, cmd: { name: 'profissao' } };
     case 'meus': case 'estabelecimentos': return { ok: true, cmd: { name: 'meus' } };
+    case 'amigos': case 'amigo': case 'familia': return { ok: true, cmd: { name: 'amigos' } };
     case 'vila': return { ok: true, cmd: { name: 'vila' } };
     case 'apoiar': return { ok: true, cmd: { name: 'apoiar' } };
     case 'livre': case 'autonomo': return { ok: true, cmd: { name: 'livre' } };
@@ -147,6 +149,15 @@ export class CommandProcessor {
       case 'meus': {
         const mine = w.establishmentsOf(msg.userId);
         reply(mine.length ? `seus estabelecimentos: ${mine.slice(0, 6).join(', ')}${mine.length > 6 ? ` e mais ${mine.length - 6}` : ''}.` : 'você ainda não é dono de nada. Líderes de profissão ganham os estabelecimentos da área.');
+        break;
+      }
+      case 'amigos': {
+        const r = w.relationsOf(msg.userId);
+        const parts: string[] = [];
+        if (r.partner) parts.push(`💞 namorando ${r.partner}`);
+        if (r.kids.length) parts.push(`👶 filhos: ${r.kids.join(', ')}`);
+        if (r.friends.length) parts.push(`🤝 amigos: ${r.friends.join(', ')}`);
+        reply(parts.length ? parts.join(' · ') + '.' : 'você ainda não fez amigos. Trabalhe perto dos outros aldeões!');
         break;
       }
       case 'vila': {
