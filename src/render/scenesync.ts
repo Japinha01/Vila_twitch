@@ -1,19 +1,18 @@
 import {
-  BoxGeometry, CanvasTexture, Color, CylinderGeometry, DoubleSide, Group, IcosahedronGeometry, InstancedMesh, Mesh,
-  MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry, RingGeometry, Sprite, SpriteMaterial,
+  BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh,
+  MeshBasicMaterial, PlaneGeometry, RingGeometry, Sprite, SpriteMaterial,
   type Camera, type Scene,
 } from 'three';
 import { MIN_HARVEST, NODE_MAX } from '../sim/config';
-import type { Building, Resource, Villager } from '../sim/types';
+import type { Building, Villager } from '../sim/types';
 import type { World } from '../sim/world';
 import { COLORS, buildingStage, makeBuilding, makeBush, makeRock, mat } from './models';
 import { MineProps } from './mines';
+import { People } from './people';
 import { TreeBatch } from './trees';
 import { HS } from './terrain';
 
-const MAX_VILLAGERS = 600;
 const MAX_NAMES = 120; // acima disso a tela vira só texto
-const LOAD_COLOR: Record<Resource, string> = { wood: '#a9743d', stone: '#868e96', food: '#e03131', water: '#339af0' };
 
 /** Faz o grupo projetar sombra. */
 const shade = (g: Group): void => g.traverse((o) => { if ((o as Mesh).isMesh) (o as Mesh).castShadow = true; });
@@ -27,12 +26,7 @@ export class SceneSync {
   private trees: TreeBatch;
   private mines: MineProps;
   private buildings = new Map<number, Group>();
-  private bodies: InstancedMesh;
-  private heads: InstancedMesh;
-  private loads: InstancedMesh;
-  private colors = new Map<number, Color>();
-  private dummy = new Object3D();
-  private tmp = new Color();
+  private people: People;
   private bars = new Map<number, Group>(); // barra de progresso das obras
   private floods = new Map<number, Mesh>(); // véu azul em prédio alagado
   /** nomes flutuando sobre os aldeões (overlay da live) */
@@ -56,16 +50,7 @@ export class SceneSync {
   constructor(private scene: Scene, private world: World) {
     this.trees = new TreeBatch(scene);
     this.mines = new MineProps(scene);
-    this.bodies = new InstancedMesh(new CylinderGeometry(0.11, 0.14, 0.34, 6), new MeshLambertMaterial({ flatShading: true }), MAX_VILLAGERS);
-    this.heads = new InstancedMesh(new IcosahedronGeometry(0.1, 0), mat('#ffe0bd'), MAX_VILLAGERS);
-    this.loads = new InstancedMesh(new BoxGeometry(0.11, 0.11, 0.11), new MeshLambertMaterial({ flatShading: true }), MAX_VILLAGERS);
-    for (const m of [this.bodies, this.heads, this.loads]) {
-      m.count = 0;
-      m.frustumCulled = false;
-      m.castShadow = true;
-      scene.add(m);
-    }
-    this.heads.castShadow = this.loads.castShadow = false;
+    this.people = new People(scene);
     this.ring = new Mesh(new RingGeometry(0.28, 0.36, 24).rotateX(-Math.PI / 2), new MeshBasicMaterial({ color: '#ffd43b', side: DoubleSide, depthTest: false, transparent: true }));
     this.ring.renderOrder = 6;
     this.ring.visible = false;
@@ -367,36 +352,6 @@ export class SceneSync {
   }
 
   private syncVillagers(time: number): void {
-    const w = this.world;
-    const list = w.villagers.slice(0, MAX_VILLAGERS);
-    const d = this.dummy;
-    list.forEach((v: Villager, i: number) => {
-      const moving = v.state === 'toTarget' || v.state === 'toStore';
-      const bob = moving ? Math.abs(Math.sin(time * 9 + v.id)) * 0.04 : v.state === 'working' ? Math.sin(time * 12 + v.id) * 0.02 : 0;
-      const q = this.at(v);
-      const y = w.groundZ(q.x, q.y) * HS + bob;
-      d.rotation.set(0, 0, 0);
-      d.scale.set(1, 1, 1);
-      d.position.set(q.x, y + 0.17, q.y);
-      d.updateMatrix();
-      this.bodies.setMatrixAt(i, d.matrix);
-      d.position.set(q.x, y + 0.45, q.y);
-      d.updateMatrix();
-      this.heads.setMatrixAt(i, d.matrix);
-      d.position.set(q.x + 0.12, y + 0.3, q.y + 0.05);
-      d.scale.setScalar(v.carryRes ? 1 : 0.0001); // sem carga: some
-      d.updateMatrix();
-      this.loads.setMatrixAt(i, d.matrix);
-      let c = this.colors.get(v.id);
-      if (!c) { c = new Color(v.color); this.colors.set(v.id, c); }
-      this.bodies.setColorAt(i, c);
-      this.loads.setColorAt(i, this.tmp.set(v.carryRes ? LOAD_COLOR[v.carryRes] : '#ffffff'));
-    });
-    for (const m of [this.bodies, this.heads, this.loads]) {
-      m.count = list.length;
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
-    }
-    if (this.colors.size > 2000) this.colors.clear();
+    this.people.update(this.world, time, (v: Villager) => this.at(v));
   }
 }
