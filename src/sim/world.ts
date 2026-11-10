@@ -945,10 +945,7 @@ export class World {
 
   /** Uma vez por dia: encerra o evento vencido e, às vezes, sorteia outro (determinístico por seed + dia, sem mexer no rng principal). */
   private dailyEvent(): void {
-    if (this.event && this.tick >= this.event.until) {
-      this.events.push(`${EVENTS[this.event.kind].icon} ${EVENTS[this.event.kind].label} terminou.`);
-      this.event = null;
-    }
+    if (this.event && this.tick >= this.event.until) this.endEvent();
     if (this.event || this.day < EVENT_FIRST_DAY) return;
     const r = mulberry32((this.seed ^ Math.imul(this.day, 0x9e3779b1)) >>> 0);
     if (r() >= EVENT_CHANCE) return;
@@ -956,10 +953,18 @@ export class World {
     if (kind) this.startEvent(kind, r);
   }
 
+  private endEvent(): void {
+    if (!this.event) return;
+    const def = EVENTS[this.event.kind];
+    if (def.days > 0) this.events.push(`${def.icon} ${def.label} terminou.`);
+    this.event = null;
+  }
+
   /** Começa um evento (sorteado ou resgatado por um viewer, que aparece no aviso). */
   private startEvent(kind: EventKind, roll: () => number, by?: string): void {
     const def = EVENTS[kind];
-    if (def.days > 0) this.event = { kind, until: this.tick + def.days * TICKS_PER_DAY, ...(by ? { by } : {}) };
+    // a chegada não dura: só mostra a festa de boas-vindas por 15 s (sem atropelar outro evento ativo)
+    if (def.days > 0 || !this.event) this.event = { kind, until: this.tick + (def.days > 0 ? def.days * TICKS_PER_DAY : 150), ...(by ? { by } : {}) };
     this.eventsSeen++;
     const delta = eventStockDelta(kind, this.stock, roll);
     const gains: string[] = [];
@@ -1061,6 +1066,7 @@ export class World {
     this.tick++;
     if (this.tick % 50 === 0) { this.checkEra(); this.checkAchievements(); }
     if (this.tick % TICKS_PER_DAY === 0) this.dailyEvent();
+    if (this.event && this.tick % 10 === 0 && this.tick >= this.event.until) this.endEvent();
     if (this.tick % 5 === 0) {
       this.crowd.fill(0);
       for (const v of this.villagers) { const t = this.tileOf(v.x, v.y); if (this.crowd[t] < 255) this.crowd[t]++; }

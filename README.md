@@ -244,7 +244,7 @@ npm run build    # gera a pasta dist/
 
 **Publicar:** suba o repositório no GitHub, importe na Vercel (preset *Vite*; build `npm run build`, saída `dist`) e cada push na `main` publica sozinho.
 
-**Visual:** o padrão é 3D low poly (Three.js). Sombras e luz que muda com a seca. O botão 🧊/🗺 no painel alterna para o isométrico 2D (ou use `?2d` na URL); se o WebGL falhar, o jogo cai sozinho para o 2D. Q e E (ou botão do meio do mouse) giram a câmera no 3D.
+**Visual:** o padrão é 3D low poly (Three.js). Sombras e luz que muda com a seca. O visual é sempre 3D (sem botão para trocar); o 2D só entra sozinho se o WebGL falhar, ou com `?2d` na URL para depurar. Q e E (ou botão do meio do mouse) giram a câmera no 3D.
 
 **Estrutura:** `src/sim` (lógica pura e determinística: relevo, água, aldeões, prédios), `src/chat` (comandos: validação → cooldown → fila → efeito), `src/render` (Canvas isométrico, vetor flat), `src/ui` (painel do streamer e chat simulado).
 
@@ -344,3 +344,6 @@ Aldeões que dividem o mesmo tile se espalham em espiral (só visual, a simulaç
 
 ## Cartas de evento com moedas da vila (M5, parte 1)
 Aldeões ganham **1 🪙 a cada 10 de XP** (`!moedas` mostra o saldo). Com `!evento` o viewer vê as cartas e com `!evento <nome>` resgata: ☔ chuva (30), 🌾 colheita (40), 🐪 caravana (50), ☄ meteoro (50), 🎉 festival (60), 🧑‍🤝‍🧑 chegada de moradores (80, +3 NPCs). Só viewers moradores (não NPCs) podem; um pedido por viewer; só um evento ativo por vez; espera global por tipo (2 a 5 dias de jogo); no máximo 6 cartas por hora de jogo; fila de até 5 pedidos. Eventos ruins (incêndio, praga) nunca são vendidos. O nome de quem ativou aparece no log e ao lado da estação. No painel, "Aprovar cartas de evento sozinho" (ligado por padrão): desligado, os pedidos esperam ✔/✖ do streamer e recusar devolve as moedas. As moedas entram no save e no perfil da nuvem; para guardá-las lá rode `supabase/coins.sql` (sem ele o jogo funciona, só sem sincronizar as moedas). Pontos do canal (EventSub) e doação ficam para a próxima parte do M5.
+
+## Visuais dos eventos (3D)
+Cada evento tem efeito na cena e no céu (só visual, em tempo real): ☔ chuva e ⛈ tempestade com gotas, céu escuro e relâmpagos; 🎉 festival com confete; 🌾 colheita com brilhos dourados; 🤒 praga com névoa verde; 🔥 incêndio com chamas e brasas perto do centro; ☄ meteoro riscando o céu, clarão e brasas na cratera; 🐪 caravana com uma carroça que chega, para perto da prefeitura e vai embora; 🧑‍🤝‍🧑 chegada com faíscas sobre a prefeitura. Um cartaz aparece por 6 s quando o evento começa (com o nome de quem resgatou a carta) e uma etiqueta fica no topo enquanto dura. Tudo funciona também no overlay do OBS.
