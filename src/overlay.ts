@@ -61,6 +61,14 @@ export async function runOverlay(
     if (c) { cam = goal = [c.yaw, c.pitch, c.dist, c.tx, c.ty, c.tz]; }
   };
   const hostMoved = (t: CameraArr): boolean => !lastHost || t.some((n, i) => Math.abs(n - lastHost![i]) > 0.002);
+  // a câmera do streamer chega à parte (~20 por segundo) e também dentro dos quadros leves
+  let lastCamMsg = -1e9; // enquanto a câmera chega à parte, a dos quadros leves (mais velha) é ignorada
+  const followHost = (t: CameraArr): void => {
+    if (!hostMoved(t)) return;
+    goal = [...t];
+    if (!cam) cam = [...t];
+    lastHost = [...t];
+  };
 
   // controles locais (no OBS a fonte não recebe mouse, então só valem numa aba normal)
   const stage = document.getElementById('stage')!;
@@ -115,6 +123,7 @@ export async function runOverlay(
       } else mirror.applyKeyframe(save);
     },
     onLight: (f) => { lastFrame = performance.now(); mirror?.applyLight(f); },
+    onCam: (c) => { lastFrame = lastCamMsg = performance.now(); followHost(c as CameraArr); },
     onStatus: (s, detail) => {
       if (s === 'error') say(detail ?? 'Erro de conexão.');
       else if (s === 'connecting') say('Conectando…');
@@ -132,10 +141,10 @@ export async function runOverlay(
     if (mirror && view) {
       if (view.setCamera && mirror.camera) {
         const t: CameraArr = mirror.camera;
-        if (hostMoved(t)) { goal = [...t]; if (!cam) cam = [...t]; lastHost = [...t]; }
+        if (performance.now() - lastCamMsg > 2500) followHost(t);
       }
       if (view.setCamera && cam && goal) {
-        const k = 1 - Math.exp(-dt * 10);
+        const k = 1 - Math.exp(-dt * 16); // segue de perto: o atraso é de ~60 ms
         cam = cam.map((c, i) => c + (goal![i] - c) * k);
         view.setCamera({ yaw: cam[0], pitch: cam[1], dist: cam[2], tx: cam[3], ty: cam[4], tz: cam[5] });
       }

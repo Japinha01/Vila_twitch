@@ -13,6 +13,6 @@ export function getSupabase(): Promise<SupabaseClient | null> {
   if (!URL || !ANON) return Promise.resolve(null);
   // realtime.worker: o batimento da conexão roda num Worker e não é freado em aba escondida
   client ??= import('@supabase/supabase-js').then(({ createClient }) =>
-    createClient(URL, ANON, { auth: { persistSession: true, detectSessionInUrl: true }, realtime: { worker: true } }));
+    createClient(URL, ANON, { auth: { persistSession: true, detectSessionInUrl: true }, realtime: { worker: true, params: { eventsPerSecond: 40 } } })); // 40/s: a câmera do overlay vai a ~20 quadros por segundo
   return client;
 }
