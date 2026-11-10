@@ -53,6 +53,8 @@ export class People {
   private tmp = new Color();
   private cols = new Map<string, { shirt: Color; pants: Color; skin: Color; hair: Color }>();
   private face = new Map<number, { x: number; y: number; a: number }>();
+  private spread = new Map<number, { x: number; y: number }>(); // afastamento suave entre aldeões que dividem o tile
+  private lastTime = 0;
 
   constructor(scene: Scene) {
     const lambert = (): MeshLambertMaterial => new MeshLambertMaterial({ flatShading: true });
@@ -95,16 +97,37 @@ export class People {
     const list = world.villagers.slice(0, MAX);
     const d = this.d;
     const toolCount = JOBS.map(() => 0);
+    // quem divide o tile se espalha em espiral (só visual); o afastamento anda suave para ninguém "pular"
+    const dt = Math.min(0.1, Math.max(0, time - this.lastTime));
+    this.lastTime = time;
+    const ease = 1 - Math.exp(-6 * dt);
+    const rank = new Map<number, number>();
+    const seen = new Map<number, number>();
+    for (const v of list) {
+      const p0 = at(v);
+      const cell = Math.floor(p0.x) * 4096 + Math.floor(p0.y);
+      const k = seen.get(cell) ?? 0;
+      seen.set(cell, k + 1);
+      rank.set(v.id, k);
+    }
     list.forEach((v, i) => {
-      const q = at(v);
+      const base = at(v);
+      const slot = rank.get(v.id) ?? 0;
+      const ang = slot * 2.399 + (v.id % 7) * 0.3;
+      const rad = Math.min(0.85, 0.22 * Math.sqrt(slot));
+      let o = this.spread.get(v.id);
+      if (!o) { o = { x: Math.cos(ang) * rad, y: Math.sin(ang) * rad }; this.spread.set(v.id, o); }
+      o.x += (Math.cos(ang) * rad - o.x) * ease;
+      o.y += (Math.sin(ang) * rad - o.y) * ease;
+      const q = { x: base.x + o.x, y: base.y + o.y };
       const moving = v.state === 'toTarget' || v.state === 'toStore';
       const working = v.state === 'working';
       // direção do corpo: para onde ele andou por último
       let f = this.face.get(v.id);
-      if (!f) { f = { x: q.x, y: q.y, a: (v.id * 2.399) % (Math.PI * 2) }; this.face.set(v.id, f); }
-      const dx = q.x - f.x, dy = q.y - f.y;
+      if (!f) { f = { x: base.x, y: base.y, a: (v.id * 2.399) % (Math.PI * 2) }; this.face.set(v.id, f); }
+      const dx = base.x - f.x, dy = base.y - f.y;
       if (dx * dx + dy * dy > 1e-6) f.a = Math.atan2(dx, dy);
-      f.x = q.x; f.y = q.y;
+      f.x = base.x; f.y = base.y;
       const phase = time * 10 + v.id;
       const bob = moving ? Math.abs(Math.sin(phase)) * 0.03 : working ? Math.sin(time * 12 + v.id) * 0.015 : 0;
       const y = world.groundZ(q.x, q.y) * HS + bob;
@@ -150,5 +173,6 @@ export class People {
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
     if (this.face.size > 3000) this.face.clear();
+    if (this.spread.size > 3000) this.spread.clear();
   }
 }
