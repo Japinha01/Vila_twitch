@@ -128,3 +128,5 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   food: 'comida',
   water: 'água',
 };
+
+export const WAITLIST_MAX = 200; // fila de espera: quantos viewers cabem

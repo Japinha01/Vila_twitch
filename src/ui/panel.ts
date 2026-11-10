@@ -44,6 +44,9 @@ export class Panel {
     seedEl.addEventListener('click', () => {
       void navigator.clipboard?.writeText(String(world.seed)).then(() => this.addLog(`🗺 Seed ${world.seed} copiada. Use em "Nova vila" ou na URL com ?seed=${world.seed}`, 'ev'), () => { /* sem permissão */ });
     });
+    const wl = $<HTMLInputElement>('waitlist');
+    wl.checked = world.waitlistOn;
+    wl.addEventListener('change', () => { world.waitlistOn = wl.checked; this.addLog(wl.checked ? '⏳ Lista de espera: ligada.' : '⏳ Lista de espera: desligada (vila cheia recusa novos viewers).', 'ev'); });
     const auto = $<HTMLInputElement>('autonomy');
     auto.checked = world.autonomy;
     auto.addEventListener('change', () => { world.autonomy = auto.checked; this.addLog(auto.checked ? '🧑‍🤝‍🧑 Aldeões autônomos: ligado.' : '🧑‍🤝‍🧑 Aldeões autônomos: desligado.', 'ev'); });
@@ -281,7 +284,7 @@ export class Panel {
     seasonEl.className = se.drought ? 'drought' : '';
     seasonEl.textContent = se.drought ? `🔥 SECA · o rio volta em ${days} dia${days > 1 ? 's' : ''}` : `☀ Temperada · seca em ${days} dia${days > 1 ? 's' : ''}`;
     $('clock').textContent = `Dia ${w.day}${w.supportActive ? ' · apoio ✨' : ''}${w.starving ? ' · fome/sede!' : ''}`;
-    $('pop').textContent = `Aldeões ${w.villagers.length}/${w.popCap} · Estoque máx. ${w.storageCap} · Obras ${w.buildings.filter((b) => !b.done).length}${w.axes + w.picks > 0 ? ` · 🪓${w.axes} ⛏${w.picks}` : ''}`;
+    $('pop').textContent = `Aldeões ${w.villagers.length}/${w.popCap}${w.waitlist.length ? ` (+${w.waitlist.length} na fila)` : ''} · Estoque máx. ${w.storageCap} · Obras ${w.buildings.filter((b) => !b.done).length}${w.axes + w.picks > 0 ? ` · 🪓${w.axes} ⛏${w.picks}` : ''}`;
     $('queueinfo').textContent = `Fila do chat: ${this.chat.queued} · descartadas: ${this.chat.dropped}`;
     this.resEl.innerHTML = RESOURCES.map((r) => {
       const pct = Math.min(100, (w.stock[r] / w.storageCap) * 100);

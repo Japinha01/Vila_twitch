@@ -1,6 +1,6 @@
 import {
   AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, DIG_COST, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
-  DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
+  DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, WAITLIST_MAX, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
   SUPPORT_BONUS, SUPPORT_MAX_TICKS, SUPPORT_TICKS, TEMPERATE_DAYS, TICKS_PER_DAY, WAREHOUSE_STORAGE,
@@ -15,6 +15,7 @@ import {
 } from './types';
 
 export type AddResult = { ok: true; villager: Villager } | { ok: false; reason: 'exists' | 'full' };
+export type QueueResult = { ok: true; position: number; already: boolean } | { ok: false; reason: 'off' | 'full' };
 export type PlaceCheck = { ok: true } | { ok: false; reason: 'cost' | 'space'; missing?: Partial<Stock> };
 export type BuildResult = { ok: true; building: Building } | Exclude<PlaceCheck, { ok: true }>;
 export type PlaceableKind = Exclude<BuildingKind, 'townhall'>;
@@ -41,6 +42,8 @@ export interface SaveData {
   springs?: number[];
   canals?: number;
   axes?: number;
+  waitlistOn?: boolean;
+  waitlist?: { userId: string; name: string; color: string }[];
   picks?: number;
   villagers: (Omit<Villager, 'workLeft'> & { workLeft: number | null })[];
   buildings: Building[];
@@ -120,6 +123,8 @@ export class World {
   private roadAnnounced = false;
   private baseSources = 0; // nascentes geradas com o mapa (rio e lagos)
   private springs: number[] = []; // nascentes criadas pelo streamer
+  waitlistOn = true; // com a vila cheia, quem usa !entrar entra na fila em vez de ser recusado
+  waitlist: { userId: string; name: string; color: string }[] = [];
   axes = 0; // machados fabricados (aceleram a lenha)
   picks = 0; // picaretas fabricadas (aceleram a pedra)
   private canals = 0; // canais cavados pelos aldeões
@@ -139,7 +144,7 @@ export class World {
     return {
       version: SAVE_VERSION, seed: this.seed, tick: this.tick, stock: { ...this.stock },
       supportUntil: this.supportUntil, nextId: this.nextId, rngState: this.rng.getState(), prevDrought: this.prevDrought, warned: this.warned, autonomy: this.autonomy, era: this.era,
-      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, axes: this.axes, picks: this.picks,
+      road: Array.from(this.road), zone: Array.from(this.zone), springs: [...this.springs], canals: this.canals, axes: this.axes, picks: this.picks, waitlistOn: this.waitlistOn, waitlist: this.waitlist.map((q) => ({ ...q })),
       // Infinity (construtor trabalhando) não existe em JSON: vira null e volta como Infinity
       villagers: this.villagers.map((v) => ({ ...v, path: v.path ? [...v.path] : null, workLeft: Number.isFinite(v.workLeft) ? v.workLeft : null })),
       buildings: this.buildings.map((b) => ({ ...b })),
@@ -189,6 +194,8 @@ export class World {
     this.springs = [];
     for (const t of data.springs ?? []) this.pushSpring(t);
     this.canals = data.canals ?? 0;
+    this.waitlistOn = data.waitlistOn ?? true;
+    this.waitlist = (data.waitlist ?? []).map((q) => ({ ...q }));
     this.axes = data.axes ?? 0;
     this.picks = data.picks ?? 0;
     this.road.fill(0); this.zone.fill(0);
@@ -566,6 +573,33 @@ export class World {
     return { ok: true, villager: v };
   }
 
+  /** Põe o viewer na fila de espera (vila cheia). A posição começa em 1. */
+  enqueue(userId: string, name: string, color: string): QueueResult {
+    if (!this.waitlistOn) return { ok: false, reason: 'off' };
+    const i = this.waitlist.findIndex((q) => q.userId === userId);
+    if (i >= 0) return { ok: true, position: i + 1, already: true };
+    if (this.waitlist.length >= WAITLIST_MAX) return { ok: false, reason: 'full' };
+    this.waitlist.push({ userId, name, color });
+    return { ok: true, position: this.waitlist.length, already: false };
+  }
+
+  leaveQueue(userId: string): boolean {
+    const i = this.waitlist.findIndex((q) => q.userId === userId);
+    if (i < 0) return false;
+    this.waitlist.splice(i, 1);
+    return true;
+  }
+
+  /** Chama quem está na fila enquanto houver vaga. */
+  private admitWaiting(): void {
+    let n = 0;
+    while (this.waitlist.length && this.villagers.length < this.popCap) {
+      const q = this.waitlist.shift()!;
+      if (this.addVillager(q.userId, q.name, q.color).ok) n++;
+    }
+    if (n > 0) this.events.push(`🏠 ${n} ${n === 1 ? 'viewer saiu' : 'viewers saíram'} da fila e ${n === 1 ? 'entrou' : 'entraram'} na vila.`);
+  }
+
   /** Remove um aldeão (streamer ou moderador). Ele pode voltar com !entrar. */
   removeVillager(userId: string): boolean {
     const i = this.villagers.findIndex((v) => v.userId === userId);
@@ -710,6 +744,7 @@ export class World {
   step(): void {
     this.tick++;
     if (this.tick % 50 === 0) this.checkEra();
+    if (this.waitlist.length && this.tick % 20 === 0) this.admitWaiting();
     if (this.autonomy && this.tick % AUTONOMY_EVERY === 0) this.autonomyStep();
     for (const v of this.villagers) {
       if (v.state !== 'toTarget' && v.state !== 'toStore') continue;
@@ -1317,7 +1352,8 @@ export class World {
     const needs: Need[] = [];
     if (farms < Math.ceil(pop / 5) && (farms === 0 || fr('food') < 0.6)) needs.push({ kind: 'farm', art: 'uma', name: 'fazenda', why: 'faltava comida' });
     if (wells < Math.ceil(pop / 6) && (wells === 0 || fr('water') < 0.6)) needs.push({ kind: 'well', art: 'um', name: 'poço', why: 'faltava água' });
-    if (pop >= this.popCap - Math.max(1, Math.ceil(pop * 0.15)) && fr('food') > 0.25 && fr('water') > 0.25) needs.push({ kind: 'house', art: 'uma', name: 'casa', why: 'faltava moradia' });
+    const openHouses = this.buildings.filter((b) => b.kind === 'house' && !b.done).length;
+    if (openHouses < 1 + Math.ceil(this.waitlist.length / HOUSE_POP) && (pop + this.waitlist.length >= this.popCap - Math.max(1, Math.ceil(pop * 0.15))) && fr('food') > 0.25 && fr('water') > 0.25) needs.push({ kind: 'house', art: 'uma', name: 'casa', why: 'faltava moradia' });
     if (RESOURCES.some((r) => fr(r) >= 0.9) && this.countKind('warehouse') < Math.ceil(houses / 3)) needs.push({ kind: 'warehouse', art: 'um', name: 'armazém', why: 'o estoque estava cheio' });
     if (houses >= 4 && this.countKind('market') < Math.floor(houses / 4)) needs.push({ kind: 'market', art: 'um', name: 'mercado', why: 'a cidade pedia comércio' });
     if (pop >= 8 && this.stock.wood < 30 && this.countKind('sawmill') === 0) needs.push({ kind: 'sawmill', art: 'uma', name: 'serraria', why: 'faltava madeira' });

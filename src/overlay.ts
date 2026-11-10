@@ -48,7 +48,7 @@ export async function runOverlay(
     const days = Math.max(1, Math.ceil(se.daysLeft));
     const html = `<div class="hudera">${eraLine(w)}</div><div class="hudtop"><b>Dia ${w.day}</b><span class="${se.drought ? 'drought' : ''}">${se.drought ? `🔥 Seca · o rio volta em ${days}d` : `☀ Temperada · seca em ${days}d`}</span></div>`
       + `<div class="hudres">${RESOURCES.map((r) => `<span>${ICON[r]} ${Math.floor(w.stock[r])}</span>`).join('')}</div>`
-      + `<div class="hudpop">👥 ${w.villagers.length}/${w.popCap}${w.supportActive ? ' · ✨ apoio' : ''}${w.starving ? ' · ⚠ fome/sede!' : ''}</div>`;
+      + `<div class="hudpop">👥 ${w.villagers.length}/${w.popCap}${w.waitlist.length ? ` (+${w.waitlist.length} na fila)` : ''}${w.supportActive ? ' · ✨ apoio' : ''}${w.starving ? ' · ⚠ fome/sede!' : ''}</div>`;
     if (html !== hudText) { hudText = html; hud.innerHTML = html; }
   };
 
