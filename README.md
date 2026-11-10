@@ -326,3 +326,6 @@ Aldeão com carga que não acha caminho até um depósito tenta mais 4 vezes e e
 - **Estoque cheio:** quem estaria parado larga a carga que não tem onde guardar e ajuda nas obras abertas (até 3 ajudantes por obra); a profissão automática ignora recurso com estoque cheio.
 - **Rotas espalhadas:** cada aldeão no tile soma um custo extra de rota (0,5, até 4), então os caminhos se espalham em vez de formar fila indiana.
 - **Overlay:** o fundo agora é escuro por padrão; `&transparente=1` no link volta ao fundo transparente.
+
+## Visual novo dos aldeões
+Cada aldeão agora tem pernas que andam, torso na cor do viewer, cabeça e cabelo variados (tom de pele e cabelo vêm do ID, estáveis), a **ferramenta da função na mão** (machado, picareta, enxada, balde ou martelo, que balança ao trabalhar) e a carga nas costas. **Líderes de profissão** usam uma coroa dourada; NPCs têm cabelo grisalho. Tudo em instâncias (cerca de 10 chamadas de desenho para centenas de aldeões).
