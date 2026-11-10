@@ -70,6 +70,8 @@ export interface Villager {
   kid?: boolean;
   parents?: [string, string];
   born?: number;
+  /** moedas da vila: 1 por 10 de XP, gastas em cartas de evento */
+  coins?: number;
 }
 
 export const JOBS: Job[] = ['wood', 'stone', 'food', 'water', 'build'];

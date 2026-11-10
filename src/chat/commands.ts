@@ -1,4 +1,5 @@
 import { TICKS_PER_SECOND } from '../sim/config';
+import { CARDS, COIN_XP, EVENTS } from '../sim/events';
 import type { Job, Resource } from '../sim/types';
 import { World } from '../sim/world';
 import { normalize, sanitizeName } from './names';
@@ -19,6 +20,8 @@ export type Command =
   | { name: 'profissao' }
   | { name: 'meus' }
   | { name: 'amigos' }
+  | { name: 'moedas' }
+  | { name: 'evento'; card: string }
   | { name: 'apoiar' };
 
 type ParseResult = { ok: true; cmd: Command } | { ok: false; error?: string };
@@ -29,7 +32,7 @@ const RES_ALIAS: Record<string, Job> = {
 
 /** Cooldown por viewer e por comando, em ms de relógio real. */
 export const COOLDOWN_MS: Record<Command['name'], number> = {
-  entrar: 5000, fila: 5000, trabalhar: 5000, livre: 5000, status: 5000, profissao: 5000, meus: 5000, amigos: 5000, vila: 10000, apoiar: 60000,
+  entrar: 5000, fila: 5000, trabalhar: 5000, livre: 5000, status: 5000, profissao: 5000, meus: 5000, amigos: 5000, vila: 10000, apoiar: 60000, moedas: 5000, evento: 10000,
 };
 
 /** Etapa 1 do pipeline: validação (sintaxe e argumentos). */
@@ -47,6 +50,8 @@ export function parseCommand(text: string): ParseResult {
     case 'amigos': case 'amigo': case 'familia': return { ok: true, cmd: { name: 'amigos' } };
     case 'vila': return { ok: true, cmd: { name: 'vila' } };
     case 'apoiar': return { ok: true, cmd: { name: 'apoiar' } };
+    case 'moedas': case 'moeda': return { ok: true, cmd: { name: 'moedas' } };
+    case 'evento': case 'eventos': return { ok: true, cmd: { name: 'evento', card: arg } };
     case 'livre': case 'autonomo': return { ok: true, cmd: { name: 'livre' } };
     case 'trabalhar': {
       const job = RES_ALIAS[arg];
@@ -164,6 +169,21 @@ export class CommandProcessor {
         const s = w.stock;
         const se = w.season;
         reply(`dia ${w.day} · ${se.drought ? '🔥 seca' : '☀ temperada'} (${Math.ceil(se.daysLeft)}d) · ${w.villagers.length}/${w.popCap} aldeões${w.waitlist.length ? ` (+${w.waitlist.length} na fila)` : ''} · 🪵${s.wood} 🪨${s.stone} 🍎${s.food} 💧${s.water}.`);
+        break;
+      }
+      case 'moedas':
+        reply(`você tem ${v.coins ?? 0} 🪙 moedas da vila (1 a cada ${COIN_XP} de XP). Gaste com !evento.`);
+        break;
+      case 'evento': {
+        if (!cmd.card) { reply(`cartas: ${CARDS.map((c) => `${EVENTS[c.kind].icon} ${c.alias[0]} (${c.cost}🪙)`).join(' · ')}. Use !evento <nome>.`); break; }
+        const r = w.requestCard(msg.userId, cmd.card);
+        if (r.ok) { reply(r.queued ? 'pedido enviado! Espera o streamer aprovar (as moedas voltam se recusar).' : 'carta ativada! Obrigado!'); break; }
+        const why: Record<string, string> = {
+          villager: 'só viewers moradores da vila podem resgatar.', unknown: `não conheço essa carta. Use !evento para ver a lista.`,
+          coins: `faltam ${r.need} 🪙 moedas.`, busy: 'já há um evento acontecendo; tente depois.', cooldown: `essa carta está em espera por mais ${r.days} dia(s).`,
+          limit: 'muitas cartas na última hora; tente mais tarde.', pending: 'você já tem um pedido esperando.', full: 'a fila de pedidos está cheia.',
+        };
+        reply(why[r.reason]);
         break;
       }
       case 'apoiar':
