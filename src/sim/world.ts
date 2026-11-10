@@ -1,5 +1,5 @@
 import {
-  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, AUTO_FILL_ROUNDS, AUTO_DEMOLISH_ROUNDS, AUTO_DEMOLISH_MAX, DIG_COST, NPC_EVERY, NPC_MIN, NPC_NAMES, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
+  AUTO_BRIDGE_MAX_SPAN, AUTO_CANAL_MAX, AUTO_CANAL_MAX_DEPTH, AUTO_CANAL_MAX_LEN, AUTO_DRAIN_LEN, AUTO_DRAIN_MAX, AUTO_DRAIN_ROUNDS, STORE_GIVE_UP, AUTO_FILL_ROUNDS, AUTO_DEMOLISH_ROUNDS, AUTO_DEMOLISH_MAX, DIG_COST, NPC_EVERY, NPC_MIN, NPC_NAMES, MAX_HEIGHT, MAX_SPRINGS, RAISE_COST, SPRING_COST, SPRING_RATE, CLEARING_RADIUS, FOREST_FADE_LEN, FOREST_FADE_START, FOREST_FAR, FOREST_NEAR, SAPLING_CHANCE, SAPLING_GROW_EVERY, AUTO_ROAD_MAX_LEN, AUTO_ROAD_RESERVE, AUTO_ROAD_PER_PASS, MARKET_RELIEF, MINE_MIN_DIST, MINE_VEINS, QUARRY_MAX_DIST, POWER_BONUS, POWER_DEMAND, POWER_SUPPLY, POWER_WATER_FULL, MARKET_RELIEF_MAX, ROAD_COST, ROAD_SPEED, ROAD_STEP_COST, AUTO_BRIDGE_MIN_STRANDED, AUTO_BRIDGE_WADE_MIN, AUTO_BUILD_MAX_DIST, AUTO_HOUSE_RESERVE, AUTO_JOB_MARGIN, AUTONOMY_EVERY, BASE_POP_CAP, BASE_STORAGE, BUILDINGS, CARRY_CAPACITY, CONSUME_EVERY, CONVEY, DAM_RAISE,
   DROUGHT_DAYS, EVAP_DROUGHT, EVAP_TEMPERATE, FLOW_EVERY, FLOW_FRACTION, GATHER_TICKS, WAITLIST_MAX, AXE_COST, PICK_COST, TOOL_BONUS, TOOL_RESERVE, GRID_H,
   GRID_W, MAP_SCALE, HOUSE_POP, IRRIGATION_RADIUS, MIN_HARVEST, MOISTURE_RATE, MOVE_SPEED, NODE_MAX,
   QUARRY_BONUS, REACH, REGROW_EVERY, SAWMILL_BONUS, SOURCE_RATE, START_STOCK, STARVING_SLOWDOWN,
@@ -1150,10 +1150,10 @@ export class World {
         if (!v.path) {
           const stores = this.buildings.filter((b) => b.done && !b.flooded && (b.kind === 'townhall' || b.kind === 'warehouse'));
           const id = this.route(v, stores.map((b) => ({ id: b.id, x: b.x + b.w / 2, y: b.y + b.h / 2, reach: Math.max(b.w, b.h) / 2 + 0.7 })));
-          if (id === undefined) { v.wait = RETRY_TICKS; return; }
+          if (id === undefined) { this.storeFailed(v); return; }
         }
         const r = this.follow(v);
-        if (r === 'blocked') { v.path = null; v.wait = RETRY_TICKS; return; }
+        if (r === 'blocked') { v.path = null; this.storeFailed(v); return; }
         if (r === 'arrived') {
           if (v.carryRes) {
             this.stock[v.carryRes] = Math.min(this.storageCap, this.stock[v.carryRes] + v.carry);
@@ -1162,6 +1162,7 @@ export class World {
           }
           v.carry = 0;
           v.carryRes = null;
+          v.storeFails = 0;
           this.resetTask(v);
         }
         return;
@@ -1169,7 +1170,19 @@ export class World {
     }
   }
 
+  /** Sem caminho até um depósito: tenta mais algumas vezes e, se não der, desiste e larga a carga. */
+  private storeFailed(v: Villager): void {
+    v.wait = RETRY_TICKS;
+    v.storeFails = (v.storeFails ?? 0) + 1;
+    if (v.storeFails >= STORE_GIVE_UP) {
+      v.carry = 0; v.carryRes = null; v.storeFails = 0;
+      this.resetTask(v);
+    }
+  }
+
   private decide(v: Villager): void {
+    // sobrou carga de outra função (trocou de profissão no meio do caminho): guarda antes de procurar trabalho
+    if (v.carry > 0 && v.carryRes) { v.state = 'toStore'; v.path = null; return; }
     const cands = this.candidates(v.job);
     const id = cands.length ? this.route(v, cands) : undefined;
     if (id === undefined) { v.wait = RETRY_TICKS; return; } // sem alvo ou sem caminho: tenta de novo em instantes
@@ -1535,7 +1548,7 @@ export class World {
     if (wells < Math.ceil(pop / 6) && (wells === 0 || fr('water') < 0.6)) needs.push({ kind: 'well', art: 'um', name: 'poço', why: 'faltava água' });
     const openHouses = this.buildings.filter((b) => b.kind === 'house' && !b.done).length;
     if (openHouses < 1 + Math.ceil(this.waitlist.length / HOUSE_POP) && (pop + this.waitlist.length >= this.popCap - Math.max(1, Math.ceil(pop * 0.15))) && fr('food') > 0.25 && fr('water') > 0.25) needs.push({ kind: 'house', art: 'uma', name: 'casa', why: 'faltava moradia' });
-    if (RESOURCES.some((r) => fr(r) >= 0.9) && this.countKind('warehouse') < Math.ceil(houses / 3)) needs.push({ kind: 'warehouse', art: 'um', name: 'armazém', why: 'o estoque estava cheio' });
+    if (RESOURCES.some((r) => fr(r) >= 0.9) && this.countKind('warehouse') < Math.ceil(houses / 3) + Math.floor(this.villagers.filter((v) => this.isStuck(v)).length / 10)) needs.push({ kind: 'warehouse', art: 'um', name: 'armazém', why: 'o estoque estava cheio' });
     if (houses >= 4 && this.countKind('market') < Math.floor(houses / 4)) needs.push({ kind: 'market', art: 'um', name: 'mercado', why: 'a cidade pedia comércio' });
     if (pop >= 8 && this.stock.wood < 30 && this.countKind('sawmill') === 0) needs.push({ kind: 'sawmill', art: 'uma', name: 'serraria', why: 'faltava madeira' });
     if (this.power.demand > 0 && this.power.supply < this.power.demand && this.countKind('waterwheel') < 1 + Math.floor(houses / 8) && !this.buildings.some((b) => b.kind === 'waterwheel' && !b.done)) {
