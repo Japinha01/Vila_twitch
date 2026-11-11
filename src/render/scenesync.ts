@@ -2,12 +2,13 @@ import { FRAMES, visibleLook } from '../sim/looks';
 import {
   BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh,
   MeshBasicMaterial, PlaneGeometry, RingGeometry, Sprite, SpriteMaterial,
-  type Camera, type Color, type Scene,
+  type Camera, type Color, type Object3D, type Scene,
 } from 'three';
 import { MIN_HARVEST, NODE_MAX } from '../sim/config';
 import type { Building, Villager } from '../sim/types';
 import type { World } from '../sim/world';
 import { COLORS, buildingStage, makeBuilding, makeBush, makeRock, mat } from './models';
+import { glbVersion } from './glb';
 import { MineProps } from './mines';
 import { People } from './people';
 import { TreeBatch } from './trees';
@@ -16,6 +17,8 @@ import { HS } from './terrain';
 const MAX_NAMES = 120; // acima disso a tela vira só texto
 
 /** Faz o grupo projetar sombra. */
+/** Pinta as malhas de uma peça (canteiros da fazenda, água do poço); peça ausente num modelo do Blender é ignorada. */
+const recolor = (o: Object3D | undefined, hex: string): void => o?.traverse((m) => { if ((m as Mesh).isMesh) (m as Mesh).material = mat(hex); });
 const shade = (g: Group): void => g.traverse((o) => { if ((o as Mesh).isMesh) (o as Mesh).castShadow = true; });
 
 /** Variação estável por id (rotação, tamanho) sem usar aleatório. */
@@ -298,7 +301,7 @@ export class SceneSync {
       if (b.kind === 'dam' && b.done) continue;
       seen.add(b.id);
       let g = this.buildings.get(b.id);
-      const stage = buildingStage(b.kind, w.era, this.dense.has(b.id));
+      const stage = `${buildingStage(b.kind, w.era, this.dense.has(b.id))}#${glbVersion()}`; // modelo do Blender chegou: troca
       if (g && g.userData.stage !== stage) { this.scene.remove(g); this.buildings.delete(b.id); g = undefined; } // a fogueira vira prefeitura
       if (!g) {
         g = makeBuilding(b.kind, w.era, this.dense.has(b.id));
@@ -314,12 +317,12 @@ export class SceneSync {
       this.syncFlood(b, g);
       if (b.kind === 'farm') {
         const ok = w.irrigated[w.idx(b.x, b.y)] === 1;
-        for (const r of (g.userData.rows as Group).children as Mesh[]) r.material = mat(ok ? COLORS.crop : COLORS.cropDry);
+        recolor(g.userData.rows as Object3D | undefined, ok ? COLORS.crop : COLORS.cropDry);
       } else if (b.kind === 'waterwheel') {
         const wheel = g.userData.wheel as Group | undefined;
         if (wheel) wheel.rotation.x = b.done && !b.flooded ? time * 2.2 * w.wheelFlow(b) : wheel.rotation.x; // gira com a água; seca, para
       } else if (b.kind === 'well') {
-        (g.userData.water as Mesh).material = mat(w.buildingWorks(b) ? COLORS.water : '#495057');
+        recolor(g.userData.water as Object3D | undefined, w.buildingWorks(b) ? COLORS.water : '#495057');
       }
     }
     for (const [id, g] of this.buildings) if (!seen.has(id)) { this.scene.remove(g); this.buildings.delete(id); }

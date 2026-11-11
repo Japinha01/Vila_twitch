@@ -5,6 +5,7 @@ import {
 } from 'three';
 import { BUILDINGS, GRID_H, GRID_W } from '../sim/config';
 import type { World } from '../sim/world';
+import { glbVersion, loadGlbModels } from './glb';
 import { makeBuilding } from './models';
 import { EventFx } from './eventfx';
 import { NightFx } from './night';
@@ -80,6 +81,7 @@ export class Renderer3D implements GameView {
     this.gl.shadowMap.enabled = true;
     this.gl.shadowMap.type = PCFSoftShadowMap;
 
+    loadGlbModels(); // modelos do Blender em segundo plano; até chegarem, ficam os feitos em código
     this.buildWater();
     this.rebuildTerrain();
     this.sync = new SceneSync(this.scene, world);
@@ -359,7 +361,7 @@ export class Renderer3D implements GameView {
 
   /** Prévia translúcida do prédio (verde = pode, vermelho = não pode). */
   private showGhostModel(gh: Ghost): void {
-    const key = `${gh.kind}:${gh.ok}`;
+    const key = `${gh.kind}:${gh.ok}:${glbVersion()}`;
     if (this.ghostKey !== key) {
       this.hideGhostModel(true);
       const m = makeBuilding(gh.kind);
