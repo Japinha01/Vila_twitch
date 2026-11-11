@@ -4,7 +4,11 @@ Esta pasta guarda os modelos 3D feitos no Blender. **Tudo aqui é opcional**: ca
 
 Os aldeões continuam em pixel art (sprites); só prédios e árvores vêm do Blender.
 
-## Passo a passo
+## Modelos prontos
+
+Os 27 modelos iniciais foram montados por `tools/blender/build_models.py` (script de código, no Blender) e já estão nesta pasta. Para refazer ou mudar algum, abra o `build_models.py` no Blender depois do `vila_export.py` e rode `build_all(...)`: ele recria as coleções e exporta de novo com `export_models(...)` (veja o cabeçalho do arquivo).
+
+## Passo a passo para modelar à mão
 
 1. Abra o Blender (3.6 ou mais novo), vá na aba **Scripting**, clique em **Abrir**, escolha `tools/blender/vila_export.py` e aperte ▶.
 2. Na vista 3D aperte **N**: aparece a aba **Vila do Chat**.

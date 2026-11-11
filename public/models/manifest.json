@@ -1,3 +1,31 @@
 {
-  "models": []
+  "models": [
+    "bridge.glb",
+    "dam.glb",
+    "farm.glb",
+    "house_0.glb",
+    "house_1.glb",
+    "house_2.glb",
+    "house_3.glb",
+    "house_4.glb",
+    "house_5.glb",
+    "house_6.glb",
+    "market_0.glb",
+    "market_1.glb",
+    "market_2.glb",
+    "quarry.glb",
+    "sawmill.glb",
+    "townhall_fogueira.glb",
+    "townhall_governo.glb",
+    "townhall_prefeitura.glb",
+    "tree_birch.glb",
+    "tree_oak.glb",
+    "tree_pine.glb",
+    "warehouse.glb",
+    "waterwheel_0.glb",
+    "waterwheel_1.glb",
+    "waterwheel_2.glb",
+    "waterwheel_3.glb",
+    "well.glb"
+  ]
 }
