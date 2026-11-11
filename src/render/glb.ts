@@ -69,25 +69,26 @@ export function registerModel(key: string, scene: Object3D): boolean {
   if (!MODEL_KEYS.has(key)) return false;
   const root = new Group();
   root.add(scene);
-  const parts: Record<string, string> = {};
-  const found: Array<[string, Object3D]> = [];
+  root.updateMatrixWorld(true);
   root.traverse((o) => {
     const mesh = o as Mesh;
-    if (mesh.isMesh) {
-      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(toLambert) : toLambert(mesh.material);
-      const matName = Array.isArray(mesh.material) ? '' : mesh.material.name;
-      if (starts(o.name, LEAF_NAMES) || starts(matName, LEAF_NAMES)) o.userData.leaf = true;
-    }
-    for (const [part, names] of Object.entries(PARTS)) if (!parts[part] && o !== root && starts(o.name, names)) { parts[part] = o.name; found.push([part, o]); }
+    if (!mesh.isMesh) return;
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(toLambert) : toLambert(mesh.material);
+    const matName = Array.isArray(mesh.material) ? '' : mesh.material.name;
+    if (starts(o.name, LEAF_NAMES) || starts(matName, LEAF_NAMES)) o.userData.leaf = true;
   });
-  // a roda gira dentro de um pivô que guarda a posição e a inclinação dadas no Blender
-  const wheel = found.find(([p]) => p === 'wheel')?.[1];
-  if (wheel?.parent) {
-    const pivot = new Group();
-    pivot.position.copy(wheel.position); pivot.quaternion.copy(wheel.quaternion); pivot.scale.copy(wheel.scale);
-    wheel.parent.add(pivot);
-    pivot.add(wheel);
-    wheel.position.set(0, 0, 0); wheel.rotation.set(0, 0, 0); wheel.scale.set(1, 1, 1);
+  // cada parte com comportamento (roda, plantação, água) vira um grupo nomeado: a roda gira em volta do próprio eixo
+  const parts: Record<string, string> = {};
+  for (const [part, prefixes] of Object.entries(PARTS)) {
+    const objs: Object3D[] = [];
+    root.traverse((o) => { if ((o as Mesh).isMesh && starts(o.name, prefixes)) objs.push(o); });
+    if (!objs.length) continue;
+    const g = new Group();
+    g.name = `vila_${part}`;
+    if (part === 'wheel') g.position.setFromMatrixPosition(objs[0].matrixWorld); // eixo = posição da primeira peça
+    root.add(g);
+    for (const o of objs) g.attach(o); // attach mantém a posição de cada peça
+    parts[part] = g.name;
   }
   root.userData = { glb: true, parts };
   root.updateMatrixWorld(true);

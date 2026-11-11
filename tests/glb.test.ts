@@ -42,30 +42,32 @@ describe('modelos .glb', () => {
     expect(mats[1]).toBeInstanceOf(MeshBasicMaterial);
   });
 
-  it('acha a roda em cada cópia e preserva a inclinação num pivô', () => {
+  it('junta a roda num grupo que gira em volta do próprio eixo', () => {
     const wheel = part('Roda.001');
     wheel.position.set(0.8, 0.6, 0);
-    wheel.rotation.set(0, 0.5, 0);
-    registerModel('waterwheel_0', scene(part('casa'), wheel));
+    registerModel('waterwheel_0', scene(part('casa'), wheel, part('Roda_pa.002')));
     const a = glbBuilding('waterwheel', '0')!, b = glbBuilding('waterwheel', '0')!;
-    const wa = a.userData.wheel as Mesh, wb = b.userData.wheel as Mesh;
-    expect(wa).toBeTruthy();
+    const wa = a.userData.wheel as Group, wb = b.userData.wheel as Group;
+    expect(wa.name).toBe('vila_wheel');
     expect(wa).not.toBe(wb);
-    expect(wa.rotation.y).toBe(0);
-    expect(wa.parent!.position.x).toBeCloseTo(0.8);
-    expect(wa.parent!.rotation.y).toBeCloseTo(0.5);
+    expect(wa.rotation.x).toBeCloseTo(0);
+    expect(wa.position.x).toBeCloseTo(0.8);
+    expect(wa.position.y).toBeCloseTo(0.6);
+    expect(wa.children).toHaveLength(2);
+    expect(wa.children[0].position.length()).toBeCloseTo(0);
   });
 
   it('pinta a plantação seca e devolve o material original', () => {
     registerModel('farm', scene(part('base'), part('plantio')));
     const g = glbBuilding('farm', '')!;
-    const rows = g.userData.rows as Mesh;
-    const original = rows.material;
+    const rows = g.userData.rows as Group; // grupo com as peças da plantação
+    const crop = rows.children[0] as Mesh;
+    const original = crop.material;
     tintPart(rows, '#d6c58a');
-    expect((rows.material as MeshLambertMaterial).color.getHexString()).toBe('d6c58a');
-    expect(rows.material).not.toBe(original);
+    expect((crop.material as MeshLambertMaterial).color.getHexString()).toBe('d6c58a');
+    expect(crop.material).not.toBe(original);
     tintPart(rows, null);
-    expect(rows.material).toBe(original);
+    expect(crop.material).toBe(original);
     expect(g.userData.water).toBeUndefined();
   });
 
