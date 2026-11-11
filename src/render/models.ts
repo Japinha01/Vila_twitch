@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BuildingKind } from '../sim/types';
+import { glbBuilding } from './glb';
 
 /** Modelos low poly gerados por código. Origem no chão, centro da base em (0, 0, 0). Unidade = 1 tile. */
 
@@ -602,6 +603,8 @@ function bake(src: Group): Group {
 }
 
 export const makeBuilding = (kind: BuildingKind, era = 0, dense = false): Group => {
+  const custom = glbBuilding(kind, buildingStage(kind, era, dense)); // modelo do Blender, se houver (public/models)
+  if (custom) return custom;
   if (kind === 'townhall' && hallStage(era) === 'fogueira') return bake(campfire());
   if (kind === 'townhall' && hallStage(era) === 'governo') return bake(capitol());
   if (kind === 'house') return bake(house(houseTier(era, dense)));

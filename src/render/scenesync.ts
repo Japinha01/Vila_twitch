@@ -8,6 +8,7 @@ import { MIN_HARVEST, NODE_MAX } from '../sim/config';
 import type { Building, Villager } from '../sim/types';
 import type { World } from '../sim/world';
 import { COLORS, buildingStage, makeBuilding, makeBush, makeRock, mat } from './models';
+import { modelsVersion, tintPart } from './glb';
 import { MineProps } from './mines';
 import { People } from './people';
 import { TreeBatch } from './trees';
@@ -289,8 +290,14 @@ export class SceneSync {
     this.dense = next;
   }
 
+  private modelsSeen = modelsVersion();
   private syncBuildings(camera: Camera, time: number): void {
     this.refreshDensity();
+    if (this.modelsSeen !== modelsVersion()) { // chegaram modelos .glb: refaz os prédios já montados
+      this.modelsSeen = modelsVersion();
+      for (const g of this.buildings.values()) this.scene.remove(g);
+      this.buildings.clear();
+    }
     const w = this.world;
     const seen = new Set<number>();
     for (const b of w.buildings) {
@@ -312,14 +319,19 @@ export class SceneSync {
       g.scale.y = b.done ? 1 : 0.12 + 0.88 * (b.progress / b.workNeeded);
       this.syncBar(b, g, camera);
       this.syncFlood(b, g);
+      const glb = g.userData.glb === true; // modelo do Blender: as partes especiais são opcionais
       if (b.kind === 'farm') {
         const ok = w.irrigated[w.idx(b.x, b.y)] === 1;
-        for (const r of (g.userData.rows as Group).children as Mesh[]) r.material = mat(ok ? COLORS.crop : COLORS.cropDry);
+        const rows = g.userData.rows as Group | undefined;
+        if (glb) { if (rows) tintPart(rows, ok ? null : COLORS.cropDry); }
+        else for (const r of rows!.children as Mesh[]) r.material = mat(ok ? COLORS.crop : COLORS.cropDry);
       } else if (b.kind === 'waterwheel') {
         const wheel = g.userData.wheel as Group | undefined;
         if (wheel) wheel.rotation.x = b.done && !b.flooded ? time * 2.2 * w.wheelFlow(b) : wheel.rotation.x; // gira com a água; seca, para
       } else if (b.kind === 'well') {
-        (g.userData.water as Mesh).material = mat(w.buildingWorks(b) ? COLORS.water : '#495057');
+        const water = g.userData.water as Mesh | undefined;
+        if (glb) { if (water) tintPart(water, w.buildingWorks(b) ? null : '#495057'); }
+        else water!.material = mat(w.buildingWorks(b) ? COLORS.water : '#495057');
       }
     }
     for (const [id, g] of this.buildings) if (!seen.has(id)) { this.scene.remove(g); this.buildings.delete(id); }
