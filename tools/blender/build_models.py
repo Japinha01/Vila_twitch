@@ -23,7 +23,7 @@ from mathutils import Matrix, Vector
 COL = {
     "tronco": "#8d5a2b", "tronco_bola": "#74481f",
     "folha_pinheiro": "#2f8a46", "folha_pinheiro_escuro": "#246b37",
-    "folha_carvalho": "#3a9d44", "folha_betula": "#43b04f",
+    "folha_carvalho": "#3a9d44", "folha_carvalho_escuro": "#2d7d37", "folha_betula": "#43b04f",
     "betula": "#e9ecef", "betula_faixa": "#343a40",
     "madeira": "#b9824a", "madeira_escura": "#8a5a2b", "porta": "#6b4a2b",
     "palha": "#d9b45a", "palha_escura": "#b8923d",
@@ -144,6 +144,24 @@ class Model:
         M = Matrix.Translation((cx, cy, z0)) @ Matrix.Rotation(rz, 4, "Z")
         self._add(mat, group, make, M)
 
+    def window(self, cx, cy, z0, w=0.24, h=0.28, facing=-1.0):
+        """Janela com moldura, vidro e peitoril, na face de frente (facing=-1: -Y)."""
+        y = cy + facing * 0.02
+        self.box("madeira_escura", cx, y, z0 - 0.03, w + 0.08, 0.04, h + 0.06)
+        self.box("vidro", cx, y + facing * 0.01, z0, w, 0.03, h)
+        self.box("janela_luz", cx, y + facing * 0.012, z0 + h * 0.45, w * 0.92, 0.02, h * 0.1)
+        self.box("cinza_claro", cx, y + facing * 0.04, z0 - 0.07, w + 0.12, 0.06, 0.04)
+
+    def door(self, cx, cy, z0, w=0.3, h=0.46, facing=-1.0):
+        """Porta com batente de madeira escura."""
+        y = cy + facing * 0.02
+        self.box("madeira_escura", cx, y, z0, w + 0.08, 0.05, h + 0.05)
+        self.box("porta", cx, y - facing * 0.005, z0, w, 0.04, h)
+
+    def trim(self, w, d, z, facing_y=True):
+        """Faixa de beiral em volta do telhado (duas linhas de tábua)."""
+        self.box("madeira_escura", 0, 0, z - 0.04, w + 0.08, d + 0.08, 0.05)
+
     def finish(self, col):
         for (group, mat), bm in self.parts.items():
             if not bm.faces:
@@ -174,10 +192,11 @@ def house1(m):  # tábuas com telhado de palha
     m.box("madeira", 0, 0, 0, 1.4, 1.3, 0.7)
     m.box("madeira_escura", 0, 0, 0, 1.44, 1.34, 0.07)
     m.gable("palha", 0, 0, 0.7, 1.7, 1.5, 0.7)
-    m.box("porta", -0.2, -0.67, 0, 0.3, 0.06, 0.46)
-    m.box("madeira_escura", 0.35, -0.67, 0.3, 0.26, 0.04, 0.28)
-    m.box("vidro", 0.35, -0.7, 0.33, 0.2, 0.03, 0.22)
+    m.trim(1.7, 1.5, 0.7)
+    m.door(-0.2, -0.67, 0)
+    m.window(0.35, -0.67, 0.32)
     m.box("pedra_escura", 0.45, -0.3, 0.8, 0.2, 0.2, 0.55)
+    m.box("pedra_clara", 0.45, -0.3, 1.35, 0.26, 0.26, 0.05)
 
 
 def house2(m):  # enxaimel, telhas e chaminé
@@ -186,10 +205,10 @@ def house2(m):  # enxaimel, telhas e chaminé
         m.box("madeira_escura", x, -0.71, 0, 0.07, 0.04, 0.8)
     m.box("madeira_escura", 0, 0, 0.72, 1.54, 1.44, 0.07)
     m.gable("tijolo", 0, 0, 0.8, 1.8, 1.6, 0.8)
-    m.box("porta", -0.3, -0.74, 0, 0.3, 0.06, 0.5)
+    m.trim(1.8, 1.6, 0.8)
+    m.door(-0.3, -0.74, 0, h=0.5)
     for x in (0.3, 0.58):
-        m.box("madeira_escura", x, -0.74, 0.38, 0.26, 0.04, 0.28)
-        m.box("vidro", x, -0.77, 0.4, 0.2, 0.03, 0.22)
+        m.window(x, -0.74, 0.38, w=0.2, h=0.22)
     m.box("pedra", 0.5, -0.35, 0.9, 0.22, 0.22, 0.7)
 
 
@@ -198,11 +217,11 @@ def house3(m):  # pedra e reboco, dois andares, ardósia
     m.box("reboco", 0, 0, 0.5, 1.5, 1.3, 0.75)
     m.box("madeira_escura", 0, 0, 0.5, 1.64, 1.44, 0.06)
     m.gable("ardosia", 0, 0, 1.25, 1.9, 1.6, 0.75)
-    m.box("porta", 0, -0.73, 0, 0.3, 0.06, 0.42)
+    m.trim(1.9, 1.6, 1.25)
+    m.door(0, -0.73, 0, h=0.42)
     for x in (-0.5, 0.5):
         for z in (0.18, 0.72):
-            m.box("madeira_escura", x, -0.68, z, 0.26, 0.04, 0.28)
-            m.box("vidro", x, -0.71, z + 0.02, 0.2, 0.03, 0.24)
+            m.window(x, -0.7, z, w=0.2, h=0.24)
     m.box("tijolo", 0.55, -0.35, 1.3, 0.24, 0.24, 0.8)
 
 
@@ -211,12 +230,12 @@ def house4(m):  # bloco de tijolo de três andares
     for z in (0.5, 1.0):
         m.box("tijolo_escuro", 0, 0, z, 1.64, 1.44, 0.05)
     m.box("pedra_escura", 0, 0, 1.5, 1.7, 1.5, 0.08)
-    m.box("porta", 0, -0.72, 0, 0.3, 0.06, 0.38)
+    m.door(0, -0.72, 0, h=0.38)
     for x in (-0.5, 0, 0.5):
         for z in (0.25, 0.7, 1.15):
             if x == 0 and z < 0.3:
                 continue
-            m.box("vidro", x, -0.72, z, 0.2, 0.03, 0.26)
+            m.window(x, -0.72, z, w=0.2, h=0.26)
     for x in (-0.45, 0.4):
         m.cyl("metal", x, 0.3, 1.58, 0.1, 0.12, 0.55, seg=6)
 
@@ -500,19 +519,23 @@ def bridge(m):
 # ---------- árvores ----------
 
 def tree_pine(m):
-    m.cyl("tronco", 0, 0, 0, 0.1, 0.06, 0.45, seg=6)
-    m.cone("folha_pinheiro_escuro", 0, 0, 0.3, 0.46, 0.55, seg=7)
-    m.cone("folha_pinheiro", 0, 0, 0.62, 0.36, 0.55, seg=7)
-    m.cone("folha_pinheiro_escuro", 0, 0, 0.95, 0.26, 0.5, seg=7)
-    m.cone("folha_pinheiro", 0, 0, 1.25, 0.15, 0.4, seg=7)
+    m.cyl("tronco", 0, 0, 0, 0.1, 0.06, 0.5, seg=7)
+    m.cone("folha_pinheiro_escuro", 0, 0, 0.28, 0.5, 0.6, seg=8)
+    m.cone("folha_pinheiro", 0, 0, 0.6, 0.4, 0.58, seg=8, rz=0.4)
+    m.cone("folha_pinheiro_escuro", 0, 0, 0.93, 0.3, 0.52, seg=8, rz=0.8)
+    m.cone("folha_pinheiro", 0, 0, 1.24, 0.19, 0.44, seg=8)
+    m.cone("folha_pinheiro", 0, 0, 1.5, 0.08, 0.2, seg=6)
 
 
 def tree_oak(m):
-    m.cyl("tronco", 0, 0, 0, 0.14, 0.09, 0.6, seg=6)
-    m.ico("folha_carvalho", 0, 0, 0.88, 0.42, sy=0.85, sub=2)
-    m.ico("folha_carvalho", 0.26, 0.1, 0.74, 0.3, sub=2)
-    m.ico("folha_carvalho", -0.24, -0.12, 0.8, 0.28, sub=2)
-    m.ico("folha_carvalho", 0.02, 0.05, 1.15, 0.24, sub=2)
+    m.cyl("tronco", 0, 0, 0, 0.15, 0.09, 0.6, seg=7)
+    m.beam("tronco", 0.1, 0.0, 0.5, 0.36, 0.07, 0.7)
+    m.beam("tronco", -0.08, 0.05, 0.56, 0.3, 0.06, -0.9)
+    m.ico("folha_carvalho", 0, 0, 0.9, 0.42, sy=0.85, sub=2)
+    for x, y, z, r in ((0.3, 0.1, 0.78, 0.3), (-0.28, -0.12, 0.8, 0.29), (0.1, -0.28, 0.72, 0.26),
+                       (-0.12, 0.28, 0.76, 0.27), (0.02, 0.04, 1.2, 0.26), (0.36, -0.12, 1.02, 0.22),
+                       (-0.34, 0.1, 1.05, 0.22)):
+        m.ico("folha_carvalho" if z > 0.75 else "folha_carvalho_escuro", x, y, z, r, sub=2)
 
 
 def tree_birch(m):
