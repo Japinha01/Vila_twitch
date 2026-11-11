@@ -7,6 +7,7 @@ import { BUILDINGS, GRID_H, GRID_W } from '../sim/config';
 import type { World } from '../sim/world';
 import { makeBuilding } from './models';
 import { EventFx } from './eventfx';
+import { loadModels, modelsVersion } from './glb';
 import { NightFx } from './night';
 import { SceneSync } from './scenesync';
 import { PostFx } from './post';
@@ -96,6 +97,7 @@ export class Renderer3D implements GameView {
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement!);
     this.resize();
     this.resetCamera();
+    void loadModels(); // modelos do Blender (opcionais); enquanto não chegam, valem os modelos em código
   }
 
   // ---------- malhas ----------
@@ -359,7 +361,7 @@ export class Renderer3D implements GameView {
 
   /** Prévia translúcida do prédio (verde = pode, vermelho = não pode). */
   private showGhostModel(gh: Ghost): void {
-    const key = `${gh.kind}:${gh.ok}`;
+    const key = `${gh.kind}:${gh.ok}:${modelsVersion()}`;
     if (this.ghostKey !== key) {
       this.hideGhostModel(true);
       const m = makeBuilding(gh.kind);

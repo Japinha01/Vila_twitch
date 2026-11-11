@@ -1,6 +1,7 @@
 import { InstancedMesh, Matrix4, Mesh, Object3D, Quaternion, Vector3, type Scene } from 'three';
 import { GRID_H, GRID_W, MIN_HARVEST, NODE_MAX } from '../sim/config';
 import type { World } from '../sim/world';
+import { glbTree, modelsVersion, tinted } from './glb';
 import { COLORS, TREE_KINDS, makeTreeKind, mat, treeKind } from './models';
 import { HS } from './terrain';
 
@@ -20,31 +21,44 @@ export class TreeBatch {
   private sc = new Vector3();
   private up = new Vector3(0, 1, 0);
 
-  constructor(scene: Scene, capacity = GRID_W * GRID_H) {
-    for (let v = 0; v < TREE_KINDS; v++) {
-      const tpl = makeTreeKind(v);
-      tpl.updateMatrixWorld(true);
-      const leaves = new Set<Object3D>(tpl.userData.leaves as Object3D[]);
-      for (const child of tpl.children) {
-        const src = child as Mesh;
-        if (!src.isMesh) continue;
-        const isLeaf = leaves.has(child);
-        const make = (material: Mesh['material'], dry: boolean): void => {
-          const mesh = new InstancedMesh(src.geometry, material, capacity);
-          mesh.count = 0;
-          mesh.castShadow = true;
-          mesh.frustumCulled = false;
-          scene.add(mesh);
-          this.parts.push({ variant: v, dry, leaf: isLeaf, mesh, local: src.matrix.clone(), n: 0 });
-        };
-        make(src.material, false);
-        if (isLeaf) make(mat(COLORS.leafDry), true);
-      }
-    }
+  private modelsSeen = modelsVersion();
+
+  constructor(private scene: Scene, private capacity = GRID_W * GRID_H) {
+    for (let v = 0; v < TREE_KINDS; v++) this.useTemplate(v);
+  }
+
+  /** (Re)monta as peças de um tipo de árvore a partir do modelo .glb, se houver, ou do modelo em código. */
+  private useTemplate(v: number): void {
+    for (const part of this.parts) if (part.variant === v) { this.scene.remove(part.mesh); part.mesh.dispose(); }
+    this.parts = this.parts.filter((part) => part.variant !== v);
+    const custom = glbTree(v);
+    const tpl = custom ?? makeTreeKind(v);
+    tpl.updateMatrixWorld(true);
+    const leaves = new Set<Object3D>((tpl.userData.leaves as Object3D[] | undefined) ?? []);
+    tpl.traverse((o) => {
+      const src = o as Mesh;
+      if (!src.isMesh || Array.isArray(src.material)) return;
+      const isLeaf = custom ? src.userData.leaf === true : leaves.has(o);
+      const make = (material: Mesh['material'], dry: boolean): void => {
+        const mesh = new InstancedMesh(src.geometry, material, this.capacity);
+        mesh.count = 0;
+        mesh.castShadow = true;
+        mesh.frustumCulled = false;
+        this.scene.add(mesh);
+        this.parts.push({ variant: v, dry, leaf: isLeaf, mesh, local: src.matrixWorld.clone(), n: 0 });
+      };
+      make(src.material, false);
+      if (isLeaf) make(custom ? tinted(src.material, COLORS.leafDry) : mat(COLORS.leafDry), true);
+    });
+    this.lastCount = -1;
   }
 
   /** Reposiciona as instâncias (a cada poucos quadros; as árvores mudam devagar). */
   update(w: World, hash01: (id: number) => number): void {
+    if (this.modelsSeen !== modelsVersion()) { // chegaram modelos .glb: troca os tipos que ganharam modelo
+      this.modelsSeen = modelsVersion();
+      for (let v = 0; v < TREE_KINDS; v++) if (glbTree(v)) this.useTemplate(v);
+    }
     const trees = w.nodes.filter((n) => n.kind === 'tree');
     if (this.frame++ % 8 !== 0 && trees.length === this.lastCount) return;
     this.lastCount = trees.length;
